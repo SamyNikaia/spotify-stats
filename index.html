@@ -13,26 +13,16 @@
       <p class="sub">Top artistes &amp; titres — 4 semaines / 6 mois / 1 an</p>
     </header>
 
-    <section id="setup" class="card hidden">
-      <h2>Setup express</h2>
-      <ol class="steps">
-        <li>Va sur <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> et crée une app.</li>
-        <li>Dans les réglages, ajoute ce Redirect URI exact&nbsp;: <code id="redirect-uri-hint"></code></li>
-        <li>Coche le scope Web API. Sauvegarde.</li>
-        <li>Copie le <strong>Client ID</strong> ici&nbsp;:</li>
-      </ol>
-      <form id="client-form" class="client-form">
-        <input id="client-id" type="text" placeholder="Client ID Spotify" autocomplete="off" spellcheck="false" required />
-        <button type="submit">C'est parti</button>
-      </form>
-      <p class="hint">Stocké uniquement dans ton navigateur (localStorage). Aucun serveur, aucun secret partagé.</p>
+    <section id="not-configured" class="card hidden">
+      <h2>Configuration requise</h2>
+      <p>L'app n'a pas encore de <code>CLIENT_ID</code> Spotify. Édite <code>config.js</code> à la racine du projet et colles-y le Client ID de ton app sur <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>.</p>
+      <p class="hint">N'oublie pas d'ajouter <code data-redirect-uri></code> aux Redirect URIs de ton app Spotify.</p>
     </section>
 
     <section id="login" class="card hidden">
       <h2>Connexion</h2>
-      <p>Connecte-toi à ton compte Spotify pour aller chercher tes stats.</p>
+      <p>Connecte-toi avec ton compte Spotify pour voir tes stats.</p>
       <button id="login-btn" class="primary">Se connecter avec Spotify</button>
-      <button id="reset-client" class="ghost">Changer de Client ID</button>
     </section>
 
     <section id="app" class="hidden">
@@ -62,6 +52,7 @@
     <div id="error" class="error hidden"></div>
   </main>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

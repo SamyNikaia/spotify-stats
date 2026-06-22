@@ -1,8 +1,9 @@
-// Spotify Stats — PKCE, 100% local, aucun backend.
-// Tout reste dans ton navigateur (localStorage).
+// Spotify Stats — PKCE, no backend.
+// Tokens live in the browser only (localStorage).
 
 const REDIRECT_URI = window.location.origin + window.location.pathname;
-const SCOPES = "user-top-read";
+const SCOPES = window.SPOTIFY_CONFIG?.SCOPES || "user-top-read";
+const CONFIG_CLIENT_ID = window.SPOTIFY_CONFIG?.CLIENT_ID || "";
 const AUTH_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const API = "https://api.spotify.com/v1";
@@ -11,15 +12,12 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const els = {
-  setup: $("#setup"),
+  notConfigured: $("#not-configured"),
   login: $("#login"),
   app: $("#app"),
-  clientForm: $("#client-form"),
-  clientInput: $("#client-id"),
   loginBtn: $("#login-btn"),
   logoutBtn: $("#logout"),
-  resetClient: $("#reset-client"),
-  redirectHint: $("#redirect-uri-hint"),
+  redirectHint: $$("[data-redirect-uri]"),
   tabs: $$(".tab"),
   artists: $("#artists"),
   tracks: $("#tracks"),
@@ -27,12 +25,12 @@ const els = {
   userTag: $("#user-tag"),
 };
 
-els.redirectHint.textContent = REDIRECT_URI;
+els.redirectHint.forEach((el) => { el.textContent = REDIRECT_URI; });
 
 // ---------- Storage ----------
 const store = {
-  get clientId() { return localStorage.getItem("sp_client_id"); },
-  set clientId(v) { localStorage.setItem("sp_client_id", v); },
+  // CLIENT_ID resolution: config.js wins, legacy localStorage value is the fallback.
+  get clientId() { return CONFIG_CLIENT_ID || localStorage.getItem("sp_client_id") || ""; },
   get accessToken() { return localStorage.getItem("sp_access_token"); },
   set accessToken(v) { localStorage.setItem("sp_access_token", v); },
   get refreshToken() { return localStorage.getItem("sp_refresh_token"); },
@@ -45,10 +43,6 @@ const store = {
     localStorage.removeItem("sp_access_token");
     localStorage.removeItem("sp_refresh_token");
     localStorage.removeItem("sp_expires_at");
-  },
-  clearAll() {
-    this.clearTokens();
-    localStorage.removeItem("sp_client_id");
   },
 };
 
@@ -244,7 +238,7 @@ async function loadRange(range) {
 }
 
 function showSection(name) {
-  els.setup.classList.toggle("hidden", name !== "setup");
+  els.notConfigured.classList.toggle("hidden", name !== "not-configured");
   els.login.classList.toggle("hidden", name !== "login");
   els.app.classList.toggle("hidden", name !== "app");
 }
@@ -267,9 +261,9 @@ async function boot() {
     window.history.replaceState({}, document.title, REDIRECT_URI);
   }
 
-  // 2) Setup ou app ?
+  // 2) Configured?
   if (!store.clientId) {
-    showSection("setup");
+    showSection("not-configured");
     return;
   }
   const hasToken = await ensureFreshToken();
@@ -282,14 +276,6 @@ async function boot() {
 }
 
 // ---------- Event wiring ----------
-els.clientForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const v = els.clientInput.value.trim();
-  if (!v) return;
-  store.clientId = v;
-  showSection("login");
-});
-
 els.loginBtn.addEventListener("click", () => {
   clearError();
   startLogin().catch(e => showError(e.message));
@@ -298,12 +284,6 @@ els.loginBtn.addEventListener("click", () => {
 els.logoutBtn.addEventListener("click", () => {
   store.clearTokens();
   showSection("login");
-});
-
-els.resetClient.addEventListener("click", () => {
-  store.clearAll();
-  els.clientInput.value = "";
-  showSection("setup");
 });
 
 els.tabs.forEach(t => {

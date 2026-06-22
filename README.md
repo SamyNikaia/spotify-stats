@@ -1,52 +1,49 @@
-# Spotify Stats — local
+# Spotify Stats
 
-Petite app web qui affiche tes top artistes & top titres Spotify sur 3 périodes :
-- 4 semaines (`short_term`)
-- 6 mois (`medium_term`)
-- 1 an (`long_term`)
+Static, no-backend SPA that shows your **top artists and tracks** on Spotify across 3 time ranges (4 weeks, 6 months, 1 year). Authenticates against Spotify via the **OAuth 2.0 PKCE** flow — tokens live in your browser only, nothing is sent to a third-party server.
 
-100% statique, aucun serveur, aucun secret partagé. Tout reste dans ton navigateur.
+## Setup (once, ~2 min)
 
-## 1) Créer une app Spotify (une fois, 2 min)
-
-1. Va sur https://developer.spotify.com/dashboard et clique **Create app**.
-2. Remplis n'importe quoi pour le nom / description.
-3. Dans **Redirect URIs**, ajoute EXACTEMENT :
-
+1. Go to https://developer.spotify.com/dashboard and click **Create app**.
+2. Pick any name and description.
+3. Under **Redirect URIs**, add exactly:
    ```
    http://127.0.0.1:8888/
    ```
+   (the trailing `/` matters)
+4. Tick **Web API**, then **Save**.
+5. Copy the **Client ID** and paste it into [`config.js`](./config.js) at the root:
+   ```js
+   window.SPOTIFY_CONFIG = {
+     CLIENT_ID: "your-client-id-here",
+     ...
+   };
+   ```
 
-4. Coche **Web API**. Sauvegarde.
-5. Copie le **Client ID** (tu en auras besoin au premier lancement).
+> No Client Secret needed — PKCE handles that.
 
-> Pas besoin du Client Secret — on utilise le flow PKCE.
+## Run locally
 
-## 2) Lancer l'app
-
-Depuis le dossier `spotify-stats` :
+From the project root:
 
 ### macOS / Linux
 ```bash
-python3 -m http.server 8888 --bind 127.0.0.1
+./start.sh
 ```
 
 ### Windows
-```powershell
-python -m http.server 8888 --bind 127.0.0.1
+```bat
+start.bat
 ```
 
-Puis ouvre **http://127.0.0.1:8888/** dans ton navigateur.
+Both scripts start a local Python HTTP server on port 8888 and open `http://127.0.0.1:8888/` in your browser.
 
-Au premier lancement :
-- colle ton Client ID,
-- clique **Se connecter avec Spotify**,
-- accepte les permissions,
-- profite.
+## Deploy
+
+When deploying to a public URL (Vercel, Netlify, GitHub Pages, …), add that URL to the **Redirect URIs** in the Spotify dashboard. You can keep the local `http://127.0.0.1:8888/` URI in parallel — Spotify allows multiple.
 
 ## Notes
 
-- Les tokens sont stockés en `localStorage` (Client ID + access/refresh token).
-- "Déconnexion" supprime les tokens, "Changer de Client ID" purge tout.
-- L'API Spotify ne propose pas de "1 semaine" ni de "all time" depuis fin 2024, d'où les 3 périodes ci-dessus.
-- Si tu changes de port, mets à jour le Redirect URI dans le dashboard Spotify.
+- Spotify's Web API only exposes 3 time ranges: `short_term` (~4 weeks), `medium_term` (~6 months), `long_term` (~1 year). There is no true "all time" since late 2024.
+- Tokens are stored in `localStorage`. **Logout** clears them.
+- Without **Extended Quota Mode** approval from Spotify, your app stays in Development mode and only the 25 users you manually add in the dashboard can log in.
