@@ -31,6 +31,7 @@ const els = {
   npProgress: $("#np-progress-fill"),
   savePlaylist: $("#save-playlist"),
   playlistStatus: $("#playlist-status"),
+  exportImage: $("#export-image"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
@@ -357,7 +358,7 @@ function clearError() {
 
 // ---------- State / routing ----------
 let currentRange = "short_term";
-let lastSnapshot = { range: null, tracks: [], me: null };
+let lastSnapshot = { range: null, tracks: [], artists: [], me: null };
 let nowPlayingTimer = null;
 const NOW_PLAYING_INTERVAL_MS = 20_000;
 
@@ -378,7 +379,7 @@ async function loadRange(range) {
     renderTracks(tracks);
     renderGenres(aggregateGenres(artists));
     if (me?.display_name) els.userTag.textContent = me.display_name;
-    lastSnapshot = { range, tracks, me };
+    lastSnapshot = { range, tracks, artists, me };
     setPlaylistStatus(null);
     els.savePlaylist.disabled = false;
   } catch (e) {
@@ -414,6 +415,176 @@ function startNowPlaying() {
 function stopNowPlaying() {
   if (nowPlayingTimer) clearInterval(nowPlayingTimer);
   nowPlayingTimer = null;
+}
+
+// ---------- Image export ----------
+function loadImage(url) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function truncate(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (ctx.measureText(text.slice(0, mid) + "…").width <= maxWidth) lo = mid + 1;
+    else hi = mid;
+  }
+  return text.slice(0, Math.max(0, lo - 1)) + "…";
+}
+
+async function exportAsImage() {
+  const { range, tracks, artists, me } = lastSnapshot;
+  if (!me || !tracks.length || !artists.length) return;
+
+  els.exportImage.disabled = true;
+  const originalLabel = els.exportImage.textContent;
+  els.exportImage.textContent = "Génération…";
+
+  try {
+    const W = 1080, H = 1350;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+
+    // Background — gradient.
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, "#0b0d10");
+    grad.addColorStop(0.6, "#11161d");
+    grad.addColorStop(1, "#08130c");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Accent glow.
+    const glow = ctx.createRadialGradient(W * 0.85, H * 0.1, 0, W * 0.85, H * 0.1, 600);
+    glow.addColorStop(0, "rgba(30, 215, 96, 0.18)");
+    glow.addColorStop(1, "rgba(30, 215, 96, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Header.
+    ctx.fillStyle = "#1ed760";
+    ctx.font = "600 22px Inter, system-ui";
+    ctx.fillText("SPOTIFY STATS", 60, 90);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 56px Inter, system-ui";
+    ctx.fillText(truncate(ctx, `Top de ${me.display_name || "moi"}`, W - 120), 60, 150);
+
+    ctx.fillStyle = "#8a93a0";
+    ctx.font = "400 24px Inter, system-ui";
+    ctx.fillText(RANGE_LABELS[range] || range, 60, 188);
+
+    // Top 5 artists row.
+    ctx.fillStyle = "#8a93a0";
+    ctx.font = "600 16px Inter, system-ui";
+    ctx.fillText("TOP 5 ARTISTES", 60, 270);
+
+    const topArtists = artists.slice(0, 5);
+    const artistImgs = await Promise.all(topArtists.map(a => loadImage(a.images?.[1]?.url || a.images?.[0]?.url)));
+    const aSize = 160;
+    const aGap = 24;
+    const aTotalW = aSize * 5 + aGap * 4;
+    const aStartX = (W - aTotalW) / 2;
+    const aY = 300;
+    topArtists.forEach((a, i) => {
+      const x = aStartX + i * (aSize + aGap);
+      ctx.save();
+      roundRect(ctx, x, aY, aSize, aSize, 18);
+      ctx.clip();
+      ctx.fillStyle = "#1a2230";
+      ctx.fillRect(x, aY, aSize, aSize);
+      if (artistImgs[i]) ctx.drawImage(artistImgs[i], x, aY, aSize, aSize);
+      ctx.restore();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "600 18px Inter, system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(truncate(ctx, a.name, aSize - 8), x + aSize / 2, aY + aSize + 28);
+      ctx.textAlign = "left";
+    });
+
+    // Top 5 tracks list.
+    ctx.fillStyle = "#8a93a0";
+    ctx.font = "600 16px Inter, system-ui";
+    ctx.fillText("TOP 5 TITRES", 60, 580);
+
+    const topTracks = tracks.slice(0, 5);
+    const trackImgs = await Promise.all(topTracks.map(t => loadImage(t.album?.images?.[1]?.url || t.album?.images?.[0]?.url)));
+    const tHeight = 110;
+    const tY0 = 610;
+    topTracks.forEach((t, i) => {
+      const y = tY0 + i * (tHeight + 16);
+
+      ctx.fillStyle = "#11161d";
+      roundRect(ctx, 60, y, W - 120, tHeight, 16);
+      ctx.fill();
+
+      ctx.fillStyle = "#5b6573";
+      ctx.font = "600 22px Inter, system-ui";
+      ctx.fillText(String(i + 1), 84, y + 64);
+
+      const imgSize = 76;
+      const imgX = 120;
+      const imgY = y + (tHeight - imgSize) / 2;
+      ctx.save();
+      roundRect(ctx, imgX, imgY, imgSize, imgSize, 10);
+      ctx.clip();
+      ctx.fillStyle = "#1a2230";
+      ctx.fillRect(imgX, imgY, imgSize, imgSize);
+      if (trackImgs[i]) ctx.drawImage(trackImgs[i], imgX, imgY, imgSize, imgSize);
+      ctx.restore();
+
+      const textX = imgX + imgSize + 22;
+      const textMaxW = W - 60 - textX - 20;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "600 26px Inter, system-ui";
+      ctx.fillText(truncate(ctx, t.name, textMaxW), textX, y + 50);
+
+      ctx.fillStyle = "#8a93a0";
+      ctx.font = "400 20px Inter, system-ui";
+      const artistsLine = (t.artists || []).map(a => a.name).join(", ");
+      ctx.fillText(truncate(ctx, artistsLine, textMaxW), textX, y + 80);
+    });
+
+    // Footer.
+    ctx.fillStyle = "#5b6573";
+    ctx.font = "500 18px Inter, system-ui";
+    ctx.fillText("Généré avec Spotify Stats", 60, H - 50);
+
+    // Trigger download.
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `spotify-stats-${range}.png`;
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "image/png");
+  } finally {
+    els.exportImage.disabled = false;
+    els.exportImage.textContent = originalLabel;
+  }
 }
 
 // ---------- Playlist creation ----------
@@ -528,5 +699,6 @@ els.tabs.forEach(t => {
 
 els.themeToggle.addEventListener("click", toggleTheme);
 els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
+els.exportImage.addEventListener("click", exportAsImage);
 
 boot();
