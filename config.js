@@ -1,5 +1,8 @@
-// Public configuration. Safe to commit — the Spotify Client ID is meant to be public.
-// Replace CLIENT_ID with the value from https://developer.spotify.com/dashboard.
+"use strict";
+
+// Configuration publique. Le Client ID Spotify est PUBLIC par design (PKCE
+// protège la confidentialité de l'auth via le code verifier), donc on peut
+// le commiter sans risque. Le client_secret, lui, ne doit JAMAIS être ici.
 
 window.SPOTIFY_CONFIG = {
   CLIENT_ID: "",

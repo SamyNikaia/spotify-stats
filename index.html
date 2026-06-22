@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark light" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.scdn.co https://platform-lookaside.fbsbx.com; connect-src 'self' https://api.spotify.com https://accounts.spotify.com; form-action https://accounts.spotify.com; base-uri 'self'" />
   <title>Spotify Stats</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -77,7 +79,8 @@
       <div class="cols">
         <section class="card col">
           <h2>Top artistes</h2>
-          <ol id="artists" class="list"></ol>
+          <ol id="artists" class="list condensed"></ol>
+          <button class="ghost small list-expand hidden" data-target="artists" type="button">Voir tout</button>
         </section>
         <section class="card col">
           <div class="card-head">
@@ -85,7 +88,8 @@
             <button id="save-playlist" class="ghost small" type="button">Sauvegarder en playlist</button>
           </div>
           <p id="playlist-status" class="playlist-status hidden"></p>
-          <ol id="tracks" class="list"></ol>
+          <ol id="tracks" class="list condensed"></ol>
+          <button class="ghost small list-expand hidden" data-target="tracks" type="button">Voir tout</button>
         </section>
       </div>
 
