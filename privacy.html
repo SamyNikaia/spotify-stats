@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Privacy Policy — Spotify Stats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .legal { max-width: 760px; }
+    .legal p, .legal li { font-size: 15px; line-height: 1.65; color: var(--fg); }
+    .legal h2 { text-transform: none; font-size: 18px; color: var(--fg); letter-spacing: -0.01em; margin-top: 28px; }
+    .legal .meta { color: var(--fg-dim); font-size: 13px; }
+    .legal ul { padding-left: 22px; }
+  </style>
+</head>
+<body>
+  <main class="wrap legal">
+    <header class="hero">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5" />
+            <circle cx="12" cy="12" r="6.5" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.5" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Privacy Policy</h1>
+          <p class="sub">How Spotify Stats handles your data.</p>
+        </div>
+      </div>
+    </header>
+
+    <section class="card">
+      <p class="meta">Last updated: 22 June 2026</p>
+
+      <h2>1. The short version</h2>
+      <p>Spotify Stats is a static web application. It has <strong>no backend, no database, and no analytics</strong>. Your Spotify data is requested by your browser directly from Spotify's servers and never travels through ours.</p>
+
+      <h2>2. Data we access from Spotify</h2>
+      <p>When you sign in, you grant the app the following scopes:</p>
+      <ul>
+        <li><code>user-top-read</code> — to list your top artists and tracks</li>
+        <li><code>user-read-recently-played</code> — to show your recent listens</li>
+        <li><code>user-read-currently-playing</code> &amp; <code>user-read-playback-state</code> — to display what you're currently playing</li>
+        <li><code>playlist-modify-private</code> &amp; <code>playlist-modify-public</code> — only used when you press "Sauvegarder en playlist"</li>
+      </ul>
+      <p>The data we receive is rendered in your browser and never transmitted elsewhere.</p>
+
+      <h2>3. Data stored on your device</h2>
+      <p>We use your browser's <code>localStorage</code> to remember three things:</p>
+      <ul>
+        <li>Your Spotify access &amp; refresh tokens (so you don't have to log in every visit)</li>
+        <li>Your theme preference (light / dark)</li>
+        <li>The token expiry timestamp</li>
+      </ul>
+      <p>You can wipe everything by clicking <strong>Déconnexion</strong> inside the app or by clearing your browser data.</p>
+
+      <h2>4. Cookies, analytics, third parties</h2>
+      <p>None. The app uses no cookies, no analytics service, no advertising, and no third-party trackers. The only external requests it makes are to <code>accounts.spotify.com</code> and <code>api.spotify.com</code> for auth and data, plus <code>fonts.googleapis.com</code> for the UI font.</p>
+
+      <h2>5. Your rights</h2>
+      <p>Because no personal data ever leaves your browser, there is nothing for us to delete on your behalf. To revoke the app's access entirely, go to <a href="https://www.spotify.com/account/apps/" target="_blank" rel="noopener">spotify.com/account/apps</a> and remove "Spotify Stats".</p>
+
+      <h2>6. Contact</h2>
+      <p>This is a personal side-project. For questions, open an issue at <a href="https://github.com/SamyNikaia/spotify-stats/issues" target="_blank" rel="noopener">github.com/SamyNikaia/spotify-stats</a>.</p>
+
+      <p><a href="./">← Back to the app</a></p>
+    </section>
+  </main>
+</body>
+</html>

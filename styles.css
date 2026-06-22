@@ -635,6 +635,29 @@ button.ghost:hover {
 }
 
 /* ============================================================
+   Page footer
+   ============================================================ */
+.page-foot {
+  margin-top: 48px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.page-foot nav { display: inline-flex; gap: 18px; }
+.page-foot a {
+  color: var(--fg-dim);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.page-foot a:hover { color: var(--fg); }
+
+/* ============================================================
    Fade-in for content
    ============================================================ */
 .fade-in {
