@@ -290,13 +290,21 @@ button.ghost:hover {
 /* ============================================================
    Tabs
    ============================================================ */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0 20px;
+}
+
 .tabs {
   display: inline-flex;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   padding: 4px;
   border-radius: 12px;
-  margin: 6px 0 20px;
 }
 
 .tab {
