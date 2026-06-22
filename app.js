@@ -17,6 +17,7 @@ const els = {
   app: $("#app"),
   loginBtn: $("#login-btn"),
   logoutBtn: $("#logout"),
+  themeToggle: $("#theme-toggle"),
   redirectHint: $$("[data-redirect-uri]"),
   tabs: $$(".tab"),
   artists: $("#artists"),
@@ -24,6 +25,27 @@ const els = {
   error: $("#error"),
   userTag: $("#user-tag"),
 };
+
+// ---------- Theme ----------
+const THEME_KEY = "sp_theme";
+function systemTheme() {
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+function currentTheme() {
+  return localStorage.getItem(THEME_KEY) || systemTheme();
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+}
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+}
+applyTheme(currentTheme());
+window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+  if (!localStorage.getItem(THEME_KEY)) applyTheme(systemTheme());
+});
 
 els.redirectHint.forEach((el) => { el.textContent = REDIRECT_URI; });
 
@@ -172,9 +194,9 @@ function showSkeletons() {
 function renderArtists(items) {
   els.artists.innerHTML = items.map((a, i) => {
     const img = (a.images && a.images[a.images.length - 1]?.url) || "";
-    return `<li class="row">
+    return `<li class="row fade-in">
       <span class="rank">${i + 1}</span>
-      ${img ? `<img src="${img}" alt="" loading="lazy" />` : `<div class="row-img"></div>`}
+      ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
       <div class="meta">
         <a href="${a.external_urls.spotify}" target="_blank" rel="noopener">
           <div class="title">${escapeHtml(a.name)}</div>
@@ -189,7 +211,7 @@ function renderTracks(items) {
   els.tracks.innerHTML = items.map((t, i) => {
     const img = (t.album?.images && t.album.images[t.album.images.length - 1]?.url) || "";
     const artists = (t.artists || []).map(a => escapeHtml(a.name)).join(", ");
-    return `<li class="row">
+    return `<li class="row fade-in">
       <span class="rank">${i + 1}</span>
       ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
       <div class="meta">
@@ -289,5 +311,7 @@ els.logoutBtn.addEventListener("click", () => {
 els.tabs.forEach(t => {
   t.addEventListener("click", () => loadRange(t.dataset.range));
 });
+
+els.themeToggle.addEventListener("click", toggleTheme);
 
 boot();

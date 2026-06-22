@@ -1,22 +1,48 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Spotify Stats — Brigade Sud</title>
+  <meta name="color-scheme" content="dark light" />
+  <title>Spotify Stats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="wrap">
     <header class="hero">
-      <h1>Spotify Stats</h1>
-      <p class="sub">Top artistes &amp; titres — 4 semaines / 6 mois / 1 an</p>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5" />
+            <circle cx="12" cy="12" r="6.5" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.5" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Spotify Stats</h1>
+          <p class="sub">Tes top artistes &amp; titres sur 4 semaines, 6 mois ou 1 an.</p>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button id="theme-toggle" class="icon-btn theme-toggle" aria-label="Changer de thème" title="Changer de thème">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7" />
+            <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <section id="not-configured" class="card hidden">
       <h2>Configuration requise</h2>
-      <p>L'app n'a pas encore de <code>CLIENT_ID</code> Spotify. Édite <code>config.js</code> à la racine du projet et colles-y le Client ID de ton app sur <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>.</p>
-      <p class="hint">N'oublie pas d'ajouter <code data-redirect-uri></code> aux Redirect URIs de ton app Spotify.</p>
+      <p>L'app n'a pas encore de <code>CLIENT_ID</code> Spotify. Édite <code>config.js</code> et colles-y le Client ID de ton app depuis <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>.</p>
+      <p>N'oublie pas d'ajouter <code data-redirect-uri></code> aux Redirect URIs de ton app Spotify.</p>
     </section>
 
     <section id="login" class="card hidden">
