@@ -1,6 +1,15 @@
 # Spotify Stats
 
-Static, no-backend SPA that shows your **top artists and tracks** on Spotify across 3 time ranges (4 weeks, 6 months, 1 year). Authenticates against Spotify via the **OAuth 2.0 PKCE** flow — tokens live in your browser only, nothing is sent to a third-party server.
+Static, no-backend SPA that shows your **top artists**, **top tracks**, **top genres**, **recently played** and **currently playing** on Spotify across 3 time ranges (4 weeks, 6 months, 1 year). One-click export of your top to an Instagram-ready PNG or a private Spotify playlist. Authenticates against Spotify via the **OAuth 2.0 PKCE** flow — tokens live in your browser only, nothing is sent to a third-party server.
+
+## Features
+
+- Top 50 artists, top 50 tracks, top 12 genres per period
+- Currently playing widget with auto-refresh
+- Recently played (last 50 tracks) with relative timestamps
+- Light / dark theme with system-preference detection
+- Save current top tracks as a private Spotify playlist
+- Export top stats as a 1080×1350 PNG card (Instagram 4:5)
 
 ## Setup (once, ~2 min)
 
@@ -40,7 +49,24 @@ Both scripts start a local Python HTTP server on port 8888 and open `http://127.
 
 ## Deploy
 
-When deploying to a public URL (Vercel, Netlify, GitHub Pages, …), add that URL to the **Redirect URIs** in the Spotify dashboard. You can keep the local `http://127.0.0.1:8888/` URI in parallel — Spotify allows multiple.
+The repo ships with a [`vercel.json`](./vercel.json) that sets strict security headers (CSP, Permissions-Policy, X-Frame-Options) tuned for the Spotify OAuth + CDN flow.
+
+```bash
+npm i -g vercel       # once
+vercel login          # once
+vercel --prod         # from the project root
+```
+
+After the first deploy, copy the Vercel URL (e.g. `https://spotify-stats-xxx.vercel.app/`) and add it to **Redirect URIs** in your Spotify dashboard alongside `http://127.0.0.1:8888/`. Spotify allows multiple URIs so you keep working locally.
+
+### Going public to anyone (Extended Quota Mode)
+
+Out of the box, a Spotify app is in **Development Mode** and only the 25 users you manually add in the dashboard can sign in. To open it to everyone you need to apply for **Extended Quota Mode** from your app dashboard. The review typically takes 1–3 weeks. The application will ask for:
+
+- A public **Privacy Policy** URL → [`/privacy.html`](./privacy.html)
+- A public **Terms of Service** URL → [`/terms.html`](./terms.html)
+- A short demo video (1–2 min Loom is enough)
+- The deployed app URL with a working sign-in flow
 
 ## Notes
 
