@@ -52,6 +52,19 @@
     </section>
 
     <section id="app" class="hidden">
+      <section id="now-playing" class="now-playing hidden" aria-live="polite">
+        <div class="np-art" id="np-art"></div>
+        <div class="np-meta">
+          <div class="np-label">
+            <span class="np-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+            En cours d'écoute
+          </div>
+          <div class="np-title" id="np-title"></div>
+          <div class="np-artist" id="np-artist"></div>
+          <div class="np-progress"><span id="np-progress-fill"></span></div>
+        </div>
+      </section>
+
       <div class="tabs" role="tablist">
         <button class="tab active" data-range="short_term" role="tab">4 semaines</button>
         <button class="tab" data-range="medium_term" role="tab">6 mois</button>
@@ -72,6 +85,11 @@
       <section class="card">
         <h2>Top genres</h2>
         <ol id="genres" class="genre-list"></ol>
+      </section>
+
+      <section class="card">
+        <h2>Récemment écoutés</h2>
+        <ol id="recents" class="list recents"></ol>
       </section>
 
       <footer class="foot">

@@ -23,6 +23,12 @@ const els = {
   artists: $("#artists"),
   tracks: $("#tracks"),
   genres: $("#genres"),
+  recents: $("#recents"),
+  nowPlaying: $("#now-playing"),
+  npArt: $("#np-art"),
+  npTitle: $("#np-title"),
+  npArtist: $("#np-artist"),
+  npProgress: $("#np-progress-fill"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
@@ -185,6 +191,26 @@ async function fetchTops(range) {
   return { artists: artists.items, tracks: tracks.items, me };
 }
 
+async function fetchRecents() {
+  const data = await api(`/me/player/recently-played?limit=50`);
+  return data.items;
+}
+
+async function fetchNowPlaying() {
+  // 204 No Content = nothing playing right now.
+  const res = await fetch(`${API}/me/player/currently-playing`, {
+    headers: { Authorization: `Bearer ${store.accessToken}` },
+  });
+  if (res.status === 204) return null;
+  if (res.status === 401) {
+    const ok = await ensureFreshToken();
+    if (!ok) return null;
+    return fetchNowPlaying();
+  }
+  if (!res.ok) return null;
+  return res.json();
+}
+
 // ---------- Render ----------
 function showSkeletons() {
   const skel = Array.from({ length: 10 }, () => `<li class="skeleton"></li>`).join("");
@@ -206,6 +232,52 @@ function aggregateGenres(artists) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
     .map(([name, score]) => ({ name, score }));
+}
+
+const relTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "à l'instant";
+  if (diff < 3600) return relTime.format(-Math.round(diff / 60), "minute");
+  if (diff < 86400) return relTime.format(-Math.round(diff / 3600), "hour");
+  return relTime.format(-Math.round(diff / 86400), "day");
+}
+
+function renderRecents(items) {
+  if (!items?.length) {
+    els.recents.innerHTML = `<li class="genre-head">Aucun titre récent.</li>`;
+    return;
+  }
+  els.recents.innerHTML = items.map((it) => {
+    const t = it.track;
+    const img = (t.album?.images && t.album.images[t.album.images.length - 1]?.url) || "";
+    const artists = (t.artists || []).map(a => escapeHtml(a.name)).join(", ");
+    return `<li class="row fade-in">
+      ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
+      <div class="meta">
+        <a href="${t.external_urls.spotify}" target="_blank" rel="noopener">
+          <div class="title">${escapeHtml(t.name)}</div>
+        </a>
+        <div class="artist">${artists}</div>
+      </div>
+      <span class="when">${timeAgo(it.played_at)}</span>
+    </li>`;
+  }).join("");
+}
+
+function renderNowPlaying(data) {
+  if (!data || !data.item) {
+    els.nowPlaying.classList.add("hidden");
+    return;
+  }
+  const t = data.item;
+  const img = t.album?.images?.[0]?.url || "";
+  els.npArt.style.backgroundImage = img ? `url("${img}")` : "";
+  els.npTitle.textContent = t.name;
+  els.npArtist.textContent = (t.artists || []).map(a => a.name).join(", ");
+  const pct = t.duration_ms ? Math.min(100, (data.progress_ms / t.duration_ms) * 100) : 0;
+  els.npProgress.style.width = `${pct}%`;
+  els.nowPlaying.classList.remove("hidden");
 }
 
 function renderGenres(items) {
@@ -277,6 +349,8 @@ function clearError() {
 
 // ---------- State / routing ----------
 let currentRange = "short_term";
+let nowPlayingTimer = null;
+const NOW_PLAYING_INTERVAL_MS = 20_000;
 
 async function loadRange(range) {
   currentRange = range;
@@ -295,6 +369,33 @@ async function loadRange(range) {
     els.tracks.innerHTML = "";
     els.genres.innerHTML = "";
   }
+}
+
+async function loadRecents() {
+  try {
+    renderRecents(await fetchRecents());
+  } catch (e) {
+    // Non-fatal: missing scope or transient error shouldn't break the page.
+    console.warn("recents:", e);
+  }
+}
+
+async function pollNowPlaying() {
+  try {
+    renderNowPlaying(await fetchNowPlaying());
+  } catch (e) {
+    renderNowPlaying(null);
+  }
+}
+
+function startNowPlaying() {
+  stopNowPlaying();
+  pollNowPlaying();
+  nowPlayingTimer = setInterval(pollNowPlaying, NOW_PLAYING_INTERVAL_MS);
+}
+function stopNowPlaying() {
+  if (nowPlayingTimer) clearInterval(nowPlayingTimer);
+  nowPlayingTimer = null;
 }
 
 function showSection(name) {
@@ -333,6 +434,8 @@ async function boot() {
   }
   showSection("app");
   loadRange(currentRange);
+  loadRecents();
+  startNowPlaying();
 }
 
 // ---------- Event wiring ----------
@@ -343,7 +446,13 @@ els.loginBtn.addEventListener("click", () => {
 
 els.logoutBtn.addEventListener("click", () => {
   store.clearTokens();
+  stopNowPlaying();
   showSection("login");
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopNowPlaying();
+  else if (store.accessToken && !els.app.classList.contains("hidden")) startNowPlaying();
 });
 
 els.tabs.forEach(t => {
