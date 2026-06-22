@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spotify Stats — Brigade Sud</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <h1>Spotify Stats</h1>
+      <p class="sub">Top artistes &amp; titres — 4 semaines / 6 mois / 1 an</p>
+    </header>
+
+    <section id="setup" class="card hidden">
+      <h2>Setup express</h2>
+      <ol class="steps">
+        <li>Va sur <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> et crée une app.</li>
+        <li>Dans les réglages, ajoute ce Redirect URI exact&nbsp;: <code id="redirect-uri-hint"></code></li>
+        <li>Coche le scope Web API. Sauvegarde.</li>
+        <li>Copie le <strong>Client ID</strong> ici&nbsp;:</li>
+      </ol>
+      <form id="client-form" class="client-form">
+        <input id="client-id" type="text" placeholder="Client ID Spotify" autocomplete="off" spellcheck="false" required />
+        <button type="submit">C'est parti</button>
+      </form>
+      <p class="hint">Stocké uniquement dans ton navigateur (localStorage). Aucun serveur, aucun secret partagé.</p>
+    </section>
+
+    <section id="login" class="card hidden">
+      <h2>Connexion</h2>
+      <p>Connecte-toi à ton compte Spotify pour aller chercher tes stats.</p>
+      <button id="login-btn" class="primary">Se connecter avec Spotify</button>
+      <button id="reset-client" class="ghost">Changer de Client ID</button>
+    </section>
+
+    <section id="app" class="hidden">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-range="short_term" role="tab">4 semaines</button>
+        <button class="tab" data-range="medium_term" role="tab">6 mois</button>
+        <button class="tab" data-range="long_term" role="tab">1 an</button>
+      </div>
+
+      <div class="cols">
+        <section class="card col">
+          <h2>Top artistes</h2>
+          <ol id="artists" class="list"></ol>
+        </section>
+        <section class="card col">
+          <h2>Top titres</h2>
+          <ol id="tracks" class="list"></ol>
+        </section>
+      </div>
+
+      <footer class="foot">
+        <button id="logout" class="ghost">Déconnexion</button>
+        <span id="user-tag" class="user-tag"></span>
+      </footer>
+    </section>
+
+    <div id="error" class="error hidden"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
