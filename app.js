@@ -59,7 +59,9 @@ const els = {
   modalBody: $("#modal-body"),
   modalCloseTriggers: $$("[data-modal-close]"),
   error: $("#error"),
-  userTag: $("#user-tag"),
+  userChip: $("#user-chip"),
+  userAvatar: $("#user-avatar"),
+  userName: $("#user-name"),
 };
 
 // ============================================================
@@ -527,7 +529,7 @@ async function loadRange(range) {
     renderArtists(artists);
     renderTracks(tracks);
     renderGenres(aggregateGenres(artists));
-    if (me?.display_name) els.userTag.textContent = me.display_name;
+    renderUserChip(me);
     lastSnapshot = { range, tracks, artists, me };
     setPlaylistStatus(null);
     els.savePlaylist.disabled = false;
@@ -1118,6 +1120,33 @@ function showSection(name) {
   els.notConfigured.classList.toggle("hidden", name !== "not-configured");
   els.login.classList.toggle("hidden", name !== "login");
   els.app.classList.toggle("hidden", name !== "app");
+  if (name !== "app") els.userChip.classList.add("hidden");
+}
+
+// Met à jour le chip utilisateur (avatar + nom + lien profil) à partir du
+// payload /me. Si pas d'image, on génère une initiale colorée en fallback.
+function renderUserChip(me) {
+  if (!me) {
+    els.userChip.classList.add("hidden");
+    return;
+  }
+  const name = me.display_name || me.id || "Moi";
+  els.userName.textContent = name;
+  const link = safeUrl(me.external_urls?.spotify);
+  if (link !== "#") els.userChip.setAttribute("href", link);
+  else els.userChip.removeAttribute("href");
+  const img = safeImageUrl(me.images?.[me.images.length - 1]?.url || me.images?.[0]?.url);
+  if (img) {
+    els.userAvatar.classList.add("has-image");
+    els.userAvatar.style.backgroundImage = `url(${JSON.stringify(img)})`;
+    els.userAvatar.textContent = "";
+  } else {
+    els.userAvatar.classList.remove("has-image");
+    els.userAvatar.style.backgroundImage = "";
+    // Initiale du display name (premier caractère utile).
+    els.userAvatar.textContent = (name.match(/\p{L}|\p{N}/u)?.[0] || "?").toUpperCase();
+  }
+  els.userChip.classList.remove("hidden");
 }
 
 async function boot() {
