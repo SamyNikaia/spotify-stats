@@ -67,6 +67,18 @@
         </div>
       </section>
 
+      <div class="search-wrap">
+        <label class="search-bar" for="search-input">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" />
+            <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+          <input id="search-input" type="search" placeholder="Cherche un artiste, un album, un titre…" autocomplete="off" spellcheck="false" />
+          <button id="search-clear" class="search-clear hidden" type="button" aria-label="Effacer">×</button>
+        </label>
+        <div id="search-results" class="search-results hidden" role="listbox"></div>
+      </div>
+
       <div class="tabs-row">
         <div class="tabs" role="tablist">
           <button class="tab active" data-range="short_term" role="tab">4 semaines</button>
@@ -110,6 +122,14 @@
     </section>
 
     <div id="error" class="error hidden"></div>
+
+    <div id="detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-content" role="document">
+        <button class="modal-close" data-modal-close type="button" aria-label="Fermer">×</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
 
     <footer class="page-foot">
       <span>Spotify Stats — not affiliated with Spotify.</span>

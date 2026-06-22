@@ -19,6 +19,9 @@ const ALLOWED_IMAGE_HOSTS = new Set([
 
 const TOP_VISIBLE_DEFAULT = 10;
 const NOW_PLAYING_INTERVAL_MS = 20_000;
+const SEARCH_DEBOUNCE_MS = 320;
+const SEARCH_LIMIT_PER_TYPE = 5;
+const SEARCH_QUERY_MAX_LEN = 200;
 // Borne large mais finie pour repérer un ?code= clairement bidon avant de POST.
 const OAUTH_CODE_MAX_LEN = 1024;
 const OAUTH_STATE_LEN = 24;
@@ -49,6 +52,12 @@ const els = {
   playlistStatus: $("#playlist-status"),
   exportImage: $("#export-image"),
   expandToggles: $$(".list-expand"),
+  searchInput: $("#search-input"),
+  searchClear: $("#search-clear"),
+  searchResults: $("#search-results"),
+  modal: $("#detail-modal"),
+  modalBody: $("#modal-body"),
+  modalCloseTriggers: $$("[data-modal-close]"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
@@ -795,6 +804,313 @@ async function createPlaylistFromTopTracks() {
 }
 
 // ============================================================
+// Explorer : recherche + modal de détail
+// ============================================================
+
+let searchTimer = null;
+// Token d'annulation : on incrémente à chaque nouvelle requête, et on ignore
+// les réponses dont le numéro n'est plus le courant (anti-race-condition).
+let searchSeq = 0;
+let lastDetailType = null;
+let lastDetailId = null;
+
+async function runSearch(query) {
+  const q = query.trim().slice(0, SEARCH_QUERY_MAX_LEN);
+  if (!q) {
+    hideSearchResults();
+    return;
+  }
+  const mySeq = ++searchSeq;
+  els.searchResults.classList.remove("hidden");
+  els.searchResults.innerHTML = `<div class="search-empty">Recherche…</div>`;
+  try {
+    const data = await api(
+      `/search?q=${encodeURIComponent(q)}&type=artist,album,track&limit=${SEARCH_LIMIT_PER_TYPE}`
+    );
+    if (mySeq !== searchSeq) return;
+    renderSearchResults(data);
+  } catch (e) {
+    if (mySeq !== searchSeq) return;
+    els.searchResults.innerHTML = `<div class="search-empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderSearchResults(data) {
+  const artists = data?.artists?.items || [];
+  const albums = data?.albums?.items || [];
+  const tracks = data?.tracks?.items || [];
+
+  if (!artists.length && !albums.length && !tracks.length) {
+    els.searchResults.innerHTML = `<div class="search-empty">Aucun résultat.</div>`;
+    return;
+  }
+
+  const sections = [];
+  if (artists.length) {
+    sections.push(renderSearchSection("Artistes", artists.map((a) => ({
+      type: "artist",
+      id: a.id,
+      img: safeImageUrl(a.images?.[a.images.length - 1]?.url),
+      title: a.name,
+      sub: (a.genres || []).slice(0, 2).join(" · ") || "Artiste",
+    }))));
+  }
+  if (albums.length) {
+    sections.push(renderSearchSection("Albums", albums.map((a) => ({
+      type: "album",
+      id: a.id,
+      img: safeImageUrl(a.images?.[a.images.length - 1]?.url),
+      title: a.name,
+      sub: (a.artists || []).map((x) => x.name).join(", ") + (a.release_date ? ` · ${a.release_date.slice(0, 4)}` : ""),
+    }))));
+  }
+  if (tracks.length) {
+    sections.push(renderSearchSection("Titres", tracks.map((t) => ({
+      type: "track",
+      id: t.id,
+      img: safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url),
+      title: t.name,
+      sub: (t.artists || []).map((x) => x.name).join(", "),
+    }))));
+  }
+  els.searchResults.innerHTML = sections.join("");
+}
+
+function renderSearchSection(label, items) {
+  const rows = items.map((it) => `
+    <button class="search-item kind-${escapeHtml(it.type)}" role="option" data-detail-type="${escapeHtml(it.type)}" data-detail-id="${escapeHtml(it.id)}">
+      ${it.img ? `<img src="${it.img}" alt="" loading="lazy" />` : `<span class="ph"></span>`}
+      <div class="meta">
+        <div class="si-title">${escapeHtml(it.title)}</div>
+        <div class="si-sub">${escapeHtml(it.sub)}</div>
+      </div>
+    </button>
+  `).join("");
+  return `<div class="search-section">${escapeHtml(label)}</div>${rows}`;
+}
+
+function hideSearchResults() {
+  els.searchResults.classList.add("hidden");
+  els.searchResults.innerHTML = "";
+}
+
+function onSearchInput() {
+  const v = els.searchInput.value;
+  els.searchClear.classList.toggle("hidden", !v);
+  clearTimeout(searchTimer);
+  if (!v.trim()) {
+    hideSearchResults();
+    return;
+  }
+  searchTimer = setTimeout(() => runSearch(v), SEARCH_DEBOUNCE_MS);
+}
+
+function clearSearch() {
+  els.searchInput.value = "";
+  els.searchClear.classList.add("hidden");
+  hideSearchResults();
+  els.searchInput.focus();
+}
+
+// ---------- Modal ----------
+
+function openModal() {
+  els.modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeModal() {
+  els.modal.classList.add("hidden");
+  els.modalBody.innerHTML = "";
+  document.body.style.overflow = "";
+  lastDetailType = null;
+  lastDetailId = null;
+}
+
+function showModalLoader() {
+  els.modalBody.innerHTML = `
+    <div class="modal-loader">
+      <div class="skeleton" style="height:140px"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>`;
+}
+
+async function openDetail(type, id) {
+  if (!type || !id) return;
+  lastDetailType = type;
+  lastDetailId = id;
+  openModal();
+  showModalLoader();
+  try {
+    if (type === "artist") {
+      const [artist, top] = await Promise.all([
+        api(`/artists/${encodeURIComponent(id)}`),
+        api(`/artists/${encodeURIComponent(id)}/top-tracks?market=from_token`).catch(() => ({ tracks: [] })),
+      ]);
+      renderArtistDetail(artist, top.tracks || []);
+    } else if (type === "album") {
+      const album = await api(`/albums/${encodeURIComponent(id)}`);
+      renderAlbumDetail(album);
+    } else if (type === "track") {
+      const track = await api(`/tracks/${encodeURIComponent(id)}`);
+      renderTrackDetail(track);
+    }
+  } catch (e) {
+    els.modalBody.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// ---------- Rendus détail ----------
+
+// Indique si l'élément est présent dans le snapshot des tops courants.
+function findInTops(kind, id) {
+  if (kind === "artist") {
+    const idx = (lastSnapshot.artists || []).findIndex((a) => a.id === id);
+    return idx >= 0 ? idx + 1 : null;
+  }
+  if (kind === "track") {
+    const idx = (lastSnapshot.tracks || []).findIndex((t) => t.id === id);
+    return idx >= 0 ? idx + 1 : null;
+  }
+  return null;
+}
+
+function rangeLabelShort(range) {
+  return ({ short_term: "4 sem", medium_term: "6 mois", long_term: "1 an" })[range] || "";
+}
+
+function fmtNumber(n) {
+  return new Intl.NumberFormat("fr-FR").format(n);
+}
+function fmtDuration(ms) {
+  const s = Math.round(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function renderArtistDetail(artist, topTracks) {
+  const cover = safeImageUrl(artist.images?.[0]?.url);
+  const spotifyLink = safeUrl(artist.external_urls?.spotify);
+  const rank = findInTops("artist", artist.id);
+
+  const trackRows = topTracks.map((t, i) => {
+    const img = safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url);
+    const link = safeUrl(t.external_urls?.spotify);
+    return `<li class="row">
+      <span class="rank">${i + 1}</span>
+      ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
+      <div class="meta">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
+          <div class="title">${escapeHtml(t.name)}</div>
+        </a>
+        <div class="artist">${escapeHtml(t.album?.name || "")}</div>
+      </div>
+      <span class="when">${fmtDuration(t.duration_ms)}</span>
+    </li>`;
+  }).join("");
+
+  els.modalBody.innerHTML = `
+    <div class="detail-head kind-artist">
+      ${cover ? `<img src="${cover}" alt="" class="cover" />` : `<div class="cover"></div>`}
+      <div>
+        <div class="detail-kind">Artiste</div>
+        <h2 id="modal-title" class="detail-name">${escapeHtml(artist.name)}</h2>
+        <p class="detail-sub">${escapeHtml((artist.genres || []).slice(0, 3).join(" · ") || "—")}</p>
+      </div>
+    </div>
+    <div class="detail-stats">
+      ${rank ? `<span class="in-top-badge">#${rank} dans ton top (${rangeLabelShort(lastSnapshot.range)})</span>` : ""}
+      <span class="stat-pill"><strong>${fmtNumber(artist.followers?.total || 0)}</strong> followers</span>
+      <span class="stat-pill">Popularité <strong>${artist.popularity ?? 0}/100</strong></span>
+    </div>
+    <div class="detail-section">
+      <h3>Top titres de l'artiste</h3>
+      <ol class="detail-list">${trackRows || `<li class="genre-head">Pas de tops disponibles.</li>`}</ol>
+    </div>
+    <div class="modal-actions">
+      <a class="primary" href="${spotifyLink}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; padding:11px 18px; border-radius:10px;">Ouvrir sur Spotify</a>
+    </div>
+  `;
+}
+
+function renderAlbumDetail(album) {
+  const cover = safeImageUrl(album.images?.[0]?.url);
+  const spotifyLink = safeUrl(album.external_urls?.spotify);
+  const artistsLine = (album.artists || []).map((a) => escapeHtml(a.name)).join(", ");
+  const totalMs = (album.tracks?.items || []).reduce((sum, t) => sum + (t.duration_ms || 0), 0);
+
+  const trackRows = (album.tracks?.items || []).map((t, i) => {
+    const link = safeUrl(t.external_urls?.spotify);
+    return `<li class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="meta">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
+          <div class="title">${escapeHtml(t.name)}</div>
+        </a>
+        <div class="artist">${(t.artists || []).map((a) => escapeHtml(a.name)).join(", ")}</div>
+      </div>
+      <span class="when">${fmtDuration(t.duration_ms)}</span>
+    </li>`;
+  }).join("");
+
+  els.modalBody.innerHTML = `
+    <div class="detail-head">
+      ${cover ? `<img src="${cover}" alt="" class="cover" />` : `<div class="cover"></div>`}
+      <div>
+        <div class="detail-kind">Album · ${escapeHtml(album.album_type || "album")}</div>
+        <h2 id="modal-title" class="detail-name">${escapeHtml(album.name)}</h2>
+        <p class="detail-sub">${artistsLine}</p>
+      </div>
+    </div>
+    <div class="detail-stats">
+      <span class="stat-pill">Sorti <strong>${escapeHtml(album.release_date || "?")}</strong></span>
+      <span class="stat-pill"><strong>${album.total_tracks || 0}</strong> titres</span>
+      <span class="stat-pill">Durée <strong>${fmtDuration(totalMs)}</strong></span>
+      ${album.label ? `<span class="stat-pill">${escapeHtml(album.label)}</span>` : ""}
+      <span class="stat-pill">Popularité <strong>${album.popularity ?? 0}/100</strong></span>
+    </div>
+    <div class="detail-section">
+      <h3>Pistes</h3>
+      <ol class="detail-list">${trackRows}</ol>
+    </div>
+    <div class="modal-actions">
+      <a class="primary" href="${spotifyLink}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; padding:11px 18px; border-radius:10px;">Ouvrir sur Spotify</a>
+    </div>
+  `;
+}
+
+function renderTrackDetail(track) {
+  const cover = safeImageUrl(track.album?.images?.[0]?.url);
+  const spotifyLink = safeUrl(track.external_urls?.spotify);
+  const artistsLine = (track.artists || []).map((a) => escapeHtml(a.name)).join(", ");
+  const rank = findInTops("track", track.id);
+
+  els.modalBody.innerHTML = `
+    <div class="detail-head">
+      ${cover ? `<img src="${cover}" alt="" class="cover" />` : `<div class="cover"></div>`}
+      <div>
+        <div class="detail-kind">Titre</div>
+        <h2 id="modal-title" class="detail-name">${escapeHtml(track.name)}</h2>
+        <p class="detail-sub">${artistsLine}</p>
+        <p class="detail-sub">Sur <strong>${escapeHtml(track.album?.name || "—")}</strong></p>
+      </div>
+    </div>
+    <div class="detail-stats">
+      ${rank ? `<span class="in-top-badge">#${rank} dans ton top (${rangeLabelShort(lastSnapshot.range)})</span>` : ""}
+      <span class="stat-pill">Durée <strong>${fmtDuration(track.duration_ms)}</strong></span>
+      <span class="stat-pill">Popularité <strong>${track.popularity ?? 0}/100</strong></span>
+      ${track.explicit ? `<span class="stat-pill">Explicit</span>` : ""}
+      ${track.album?.release_date ? `<span class="stat-pill">Sorti <strong>${escapeHtml(track.album.release_date)}</strong></span>` : ""}
+    </div>
+    <div class="modal-actions">
+      <a class="primary" href="${spotifyLink}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; padding:11px 18px; border-radius:10px;">Ouvrir sur Spotify</a>
+    </div>
+  `;
+}
+
+// ============================================================
 // Routage
 // ============================================================
 
@@ -880,5 +1196,39 @@ els.themeToggle.addEventListener("click", toggleTheme);
 els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
 els.exportImage.addEventListener("click", exportAsImage);
 wireExpandToggles();
+
+// ---------- Wiring de la recherche ----------
+els.searchInput.addEventListener("input", onSearchInput);
+els.searchInput.addEventListener("focus", () => {
+  if (els.searchResults.innerHTML.trim()) els.searchResults.classList.remove("hidden");
+});
+els.searchClear.addEventListener("click", clearSearch);
+
+// Click sur un résultat → on délègue, plus simple que d'attacher N listeners.
+els.searchResults.addEventListener("click", (e) => {
+  const btn = e.target.closest(".search-item");
+  if (!btn) return;
+  const type = btn.dataset.detailType;
+  const id = btn.dataset.detailId;
+  hideSearchResults();
+  openDetail(type, id);
+});
+
+// Click en dehors de la search-wrap : on referme les résultats.
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-wrap")) hideSearchResults();
+});
+
+// ---------- Wiring du modal ----------
+els.modalCloseTriggers.forEach((el) => el.addEventListener("click", closeModal));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!els.modal.classList.contains("hidden")) {
+    closeModal();
+  } else if (!els.searchResults.classList.contains("hidden")) {
+    hideSearchResults();
+    els.searchInput.blur();
+  }
+});
 
 boot();
