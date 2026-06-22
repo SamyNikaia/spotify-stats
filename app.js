@@ -29,6 +29,8 @@ const els = {
   npTitle: $("#np-title"),
   npArtist: $("#np-artist"),
   npProgress: $("#np-progress-fill"),
+  savePlaylist: $("#save-playlist"),
+  playlistStatus: $("#playlist-status"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
@@ -169,15 +171,21 @@ async function ensureFreshToken() {
 }
 
 // ---------- API ----------
-async function api(path) {
+async function api(path, options = {}) {
+  const { method = "GET", body } = options;
+  const headers = { Authorization: `Bearer ${store.accessToken}` };
+  if (body) headers["Content-Type"] = "application/json";
   const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${store.accessToken}` },
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) {
     const ok = await ensureFreshToken();
     if (!ok) throw new Error("Session expirée. Reconnecte-toi.");
-    return api(path);
+    return api(path, options);
   }
+  if (res.status === 204) return null;
   if (!res.ok) throw new Error(`API ${path} → ${res.status} ${await res.text()}`);
   return res.json();
 }
@@ -349,8 +357,15 @@ function clearError() {
 
 // ---------- State / routing ----------
 let currentRange = "short_term";
+let lastSnapshot = { range: null, tracks: [], me: null };
 let nowPlayingTimer = null;
 const NOW_PLAYING_INTERVAL_MS = 20_000;
+
+const RANGE_LABELS = {
+  short_term: "4 dernières semaines",
+  medium_term: "6 derniers mois",
+  long_term: "1 dernière année",
+};
 
 async function loadRange(range) {
   currentRange = range;
@@ -363,6 +378,9 @@ async function loadRange(range) {
     renderTracks(tracks);
     renderGenres(aggregateGenres(artists));
     if (me?.display_name) els.userTag.textContent = me.display_name;
+    lastSnapshot = { range, tracks, me };
+    setPlaylistStatus(null);
+    els.savePlaylist.disabled = false;
   } catch (e) {
     showError(e.message || String(e));
     els.artists.innerHTML = "";
@@ -396,6 +414,55 @@ function startNowPlaying() {
 function stopNowPlaying() {
   if (nowPlayingTimer) clearInterval(nowPlayingTimer);
   nowPlayingTimer = null;
+}
+
+// ---------- Playlist creation ----------
+function setPlaylistStatus(msg, { error = false, link = null } = {}) {
+  if (!msg) {
+    els.playlistStatus.classList.add("hidden");
+    els.playlistStatus.textContent = "";
+    return;
+  }
+  els.playlistStatus.classList.remove("hidden");
+  els.playlistStatus.classList.toggle("error", error);
+  els.playlistStatus.innerHTML = link
+    ? `${escapeHtml(msg)} <a href="${link}" target="_blank" rel="noopener">Ouvrir →</a>`
+    : escapeHtml(msg);
+}
+
+async function createPlaylistFromTopTracks() {
+  const { range, tracks, me } = lastSnapshot;
+  if (!me || !tracks?.length) {
+    setPlaylistStatus("Données pas encore chargées, réessaie dans une seconde.", { error: true });
+    return;
+  }
+  els.savePlaylist.disabled = true;
+  setPlaylistStatus("Création de la playlist…");
+  try {
+    const now = new Date();
+    const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    const name = `Mes tops — ${RANGE_LABELS[range]} (${monthLabel})`;
+    const playlist = await api(`/users/${encodeURIComponent(me.id)}/playlists`, {
+      method: "POST",
+      body: {
+        name,
+        description: `Top ${tracks.length} de ${me.display_name || "moi"} sur ${RANGE_LABELS[range]}. Généré via Spotify Stats.`,
+        public: false,
+      },
+    });
+    const uris = tracks.map(t => t.uri).filter(Boolean);
+    await api(`/playlists/${playlist.id}/tracks`, {
+      method: "POST",
+      body: { uris },
+    });
+    setPlaylistStatus(`Playlist "${name}" créée avec ${uris.length} titres.`, {
+      link: playlist.external_urls?.spotify,
+    });
+  } catch (e) {
+    setPlaylistStatus(`Échec : ${e.message}`, { error: true });
+  } finally {
+    els.savePlaylist.disabled = false;
+  }
 }
 
 function showSection(name) {
@@ -460,5 +527,6 @@ els.tabs.forEach(t => {
 });
 
 els.themeToggle.addEventListener("click", toggleTheme);
+els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
 
 boot();
