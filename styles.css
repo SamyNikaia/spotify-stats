@@ -418,6 +418,62 @@ button.ghost:hover {
 }
 
 /* ============================================================
+   Genre list (ranked horizontal bars)
+   ============================================================ */
+.genre-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 22px;
+}
+
+.genre {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+}
+
+.genre-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.genre-head .rank {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  width: 22px;
+  text-align: right;
+}
+
+.genre-count {
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.genre-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-row);
+  overflow: hidden;
+}
+.genre-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ============================================================
    Fade-in for content
    ============================================================ */
 .fade-in {

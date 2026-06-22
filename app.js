@@ -22,6 +22,7 @@ const els = {
   tabs: $$(".tab"),
   artists: $("#artists"),
   tracks: $("#tracks"),
+  genres: $("#genres"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
@@ -189,6 +190,41 @@ function showSkeletons() {
   const skel = Array.from({ length: 10 }, () => `<li class="skeleton"></li>`).join("");
   els.artists.innerHTML = skel;
   els.tracks.innerHTML = skel;
+  els.genres.innerHTML = "";
+}
+
+function aggregateGenres(artists) {
+  const counts = new Map();
+  artists.forEach((a, idx) => {
+    // Weighted: top-ranked artists matter more (1 / rank).
+    const weight = 1 + (artists.length - idx) / artists.length;
+    (a.genres || []).forEach(g => {
+      counts.set(g, (counts.get(g) || 0) + weight);
+    });
+  });
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([name, score]) => ({ name, score }));
+}
+
+function renderGenres(items) {
+  if (!items.length) {
+    els.genres.innerHTML = `<li class="genre-head">Pas assez de données pour cette période.</li>`;
+    return;
+  }
+  const max = items[0].score;
+  els.genres.innerHTML = items.map((g, i) => {
+    const pct = Math.round((g.score / max) * 100);
+    return `<li class="genre fade-in">
+      <div class="genre-head">
+        <span class="rank">${i + 1}</span>
+        <span>${escapeHtml(g.name)}</span>
+      </div>
+      <span class="genre-count">${pct}%</span>
+      <div class="genre-bar"><span style="width:${pct}%"></span></div>
+    </li>`;
+  }).join("");
 }
 
 function renderArtists(items) {
@@ -251,11 +287,13 @@ async function loadRange(range) {
     const { artists, tracks, me } = await fetchTops(range);
     renderArtists(artists);
     renderTracks(tracks);
+    renderGenres(aggregateGenres(artists));
     if (me?.display_name) els.userTag.textContent = me.display_name;
   } catch (e) {
     showError(e.message || String(e));
     els.artists.innerHTML = "";
     els.tracks.innerHTML = "";
+    els.genres.innerHTML = "";
   }
 }
 
