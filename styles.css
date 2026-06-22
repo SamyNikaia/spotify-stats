@@ -1,7 +1,7 @@
 /* ============================================================
-   Spotify Stats — Visual system
-   Two themes (dark + light) driven by CSS custom properties
-   and the [data-theme] attribute on <html>.
+   Spotify Stats — Système visuel
+   Deux thèmes (dark + light) pilotés par des CSS custom properties
+   et l'attribut [data-theme] sur <html>.
    ============================================================ */
 
 :root,
@@ -50,6 +50,7 @@
 /* ============================================================
    Base
    ============================================================ */
+/* Reset minimal + body avec halo de gradient. */
 * { box-sizing: border-box; }
 
 html, body {
@@ -333,8 +334,20 @@ button.ghost:hover {
 }
 
 /* ============================================================
-   List rows
+   Lignes des listes (artistes / titres / récents)
    ============================================================ */
+/* En mode condensé, seules les 10 premières lignes sont visibles.
+   Le bouton .list-expand toggle cette classe. */
+.list.condensed > .row:nth-child(n+11) {
+  display: none;
+}
+
+.list-expand {
+  display: block;
+  margin: 14px auto 0;
+  min-width: 160px;
+}
+
 .list {
   list-style: none;
   padding: 0;

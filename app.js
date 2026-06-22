@@ -1,5 +1,7 @@
-// Spotify Stats — PKCE, no backend.
-// Tokens live in the browser only (localStorage).
+"use strict";
+
+// Spotify Stats — flow PKCE, aucun backend.
+// Les tokens vivent uniquement dans le navigateur (localStorage).
 
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 const SCOPES = window.SPOTIFY_CONFIG?.SCOPES || "user-top-read";
@@ -7,6 +9,20 @@ const CONFIG_CLIENT_ID = window.SPOTIFY_CONFIG?.CLIENT_ID || "";
 const AUTH_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const API = "https://api.spotify.com/v1";
+
+// Domaines auxquels on autorise les images (Spotify CDN + avatars FB-linked).
+const ALLOWED_IMAGE_HOSTS = new Set([
+  "i.scdn.co",
+  "mosaic.scdn.co",
+  "platform-lookaside.fbsbx.com",
+]);
+
+const TOP_VISIBLE_DEFAULT = 10;
+const NOW_PLAYING_INTERVAL_MS = 20_000;
+// Borne large mais finie pour repérer un ?code= clairement bidon avant de POST.
+const OAUTH_CODE_MAX_LEN = 1024;
+const OAUTH_STATE_LEN = 24;
+const PKCE_VERIFIER_LEN = 64;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -32,11 +48,69 @@ const els = {
   savePlaylist: $("#save-playlist"),
   playlistStatus: $("#playlist-status"),
   exportImage: $("#export-image"),
+  expandToggles: $$(".list-expand"),
   error: $("#error"),
   userTag: $("#user-tag"),
 };
 
-// ---------- Theme ----------
+// ============================================================
+// Helpers de sécurité (XSS / open redirect / injection URL)
+// ============================================================
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
+// N'autorise que http(s). Renvoie "#" sinon, ce qui rend tout lien inerte
+// si l'API renvoyait un jour un `javascript:` ou autre schéma exotique.
+function safeUrl(url) {
+  if (typeof url !== "string" || !url) return "#";
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "#";
+    return u.href;
+  } catch {
+    return "#";
+  }
+}
+
+// Whitelist stricte des hôtes d'images. Tout ce qui sort de là est ignoré.
+function safeImageUrl(url) {
+  if (typeof url !== "string" || !url) return "";
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return "";
+    const host = u.hostname;
+    if (host.endsWith(".scdn.co") || ALLOWED_IMAGE_HOSTS.has(host)) return u.href;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+// Format des URIs Spotify : `spotify:<type>:<id>` avec id base62 sur 22 chars.
+function isValidSpotifyTrackUri(uri) {
+  return typeof uri === "string" && /^spotify:track:[A-Za-z0-9]{22}$/.test(uri);
+}
+
+// Token OAuth de Spotify : alphabet base64url + tirets, et longueur raisonnable.
+function looksLikeOauthCode(code) {
+  return typeof code === "string"
+    && code.length > 0
+    && code.length <= OAUTH_CODE_MAX_LEN
+    && /^[A-Za-z0-9_\-.~]+$/.test(code);
+}
+
+// ============================================================
+// Thème
+// ============================================================
+
 const THEME_KEY = "sp_theme";
 function systemTheme() {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -59,9 +133,13 @@ window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", ()
 
 els.redirectHint.forEach((el) => { el.textContent = REDIRECT_URI; });
 
-// ---------- Storage ----------
+// ============================================================
+// Storage
+// ============================================================
+
 const store = {
-  // CLIENT_ID resolution: config.js wins, legacy localStorage value is the fallback.
+  // Le CLIENT_ID de config.js prime ; fallback sur l'ancien input localStorage
+  // pour ne pas casser les sessions des utilisateurs déjà en place.
   get clientId() { return CONFIG_CLIENT_ID || localStorage.getItem("sp_client_id") || ""; },
   get accessToken() { return localStorage.getItem("sp_access_token"); },
   set accessToken(v) { localStorage.setItem("sp_access_token", v); },
@@ -69,8 +147,16 @@ const store = {
   set refreshToken(v) { localStorage.setItem("sp_refresh_token", v); },
   get tokenExpiresAt() { return Number(localStorage.getItem("sp_expires_at") || 0); },
   set tokenExpiresAt(v) { localStorage.setItem("sp_expires_at", String(v)); },
+  // verifier + state vivent en sessionStorage : effacés à la fermeture du tab,
+  // ce qui suffit (ils ne servent qu'au round-trip OAuth).
   get verifier() { return sessionStorage.getItem("sp_verifier"); },
   set verifier(v) { sessionStorage.setItem("sp_verifier", v); },
+  get oauthState() { return sessionStorage.getItem("sp_state"); },
+  set oauthState(v) { sessionStorage.setItem("sp_state", v); },
+  clearOauthEphemeral() {
+    sessionStorage.removeItem("sp_verifier");
+    sessionStorage.removeItem("sp_state");
+  },
   clearTokens() {
     localStorage.removeItem("sp_access_token");
     localStorage.removeItem("sp_refresh_token");
@@ -78,7 +164,10 @@ const store = {
   },
 };
 
-// ---------- PKCE helpers ----------
+// ============================================================
+// PKCE
+// ============================================================
+
 function randomString(len = 64) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
   const arr = new Uint8Array(len);
@@ -101,10 +190,17 @@ async function challengeFromVerifier(verifier) {
   return b64url(await sha256(verifier));
 }
 
-// ---------- Auth flow ----------
+// ============================================================
+// Flow OAuth
+// ============================================================
+
 async function startLogin() {
-  const verifier = randomString(64);
+  const verifier = randomString(PKCE_VERIFIER_LEN);
+  // `state` : anti-CSRF OAuth — on vérifie au retour que c'est bien nous
+  // qui avons lancé la requête (et pas un site tiers qui aurait forgé un lien).
+  const state = randomString(OAUTH_STATE_LEN);
   store.verifier = verifier;
+  store.oauthState = state;
   const challenge = await challengeFromVerifier(verifier);
   const params = new URLSearchParams({
     response_type: "code",
@@ -113,6 +209,7 @@ async function startLogin() {
     code_challenge_method: "S256",
     code_challenge: challenge,
     redirect_uri: REDIRECT_URI,
+    state,
   });
   window.location.assign(`${AUTH_URL}?${params.toString()}`);
 }
@@ -132,7 +229,7 @@ async function exchangeCodeForToken(code) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok) throw new Error(`Échange token échoué: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`Échange token échoué : ${res.status} ${await res.text()}`);
   const data = await res.json();
   store.accessToken = data.access_token;
   if (data.refresh_token) store.refreshToken = data.refresh_token;
@@ -152,7 +249,7 @@ async function refreshAccessToken() {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok) throw new Error(`Refresh échoué: ${res.status}`);
+  if (!res.ok) throw new Error(`Refresh échoué : ${res.status}`);
   const data = await res.json();
   store.accessToken = data.access_token;
   if (data.refresh_token) store.refreshToken = data.refresh_token;
@@ -165,13 +262,16 @@ async function ensureFreshToken() {
   try {
     await refreshAccessToken();
     return true;
-  } catch (e) {
+  } catch {
     store.clearTokens();
     return false;
   }
 }
 
-// ---------- API ----------
+// ============================================================
+// API Spotify
+// ============================================================
+
 async function api(path, options = {}) {
   const { method = "GET", body } = options;
   const headers = { Authorization: `Bearer ${store.accessToken}` };
@@ -206,7 +306,7 @@ async function fetchRecents() {
 }
 
 async function fetchNowPlaying() {
-  // 204 No Content = nothing playing right now.
+  // 204 No Content = rien en lecture en ce moment.
   const res = await fetch(`${API}/me/player/currently-playing`, {
     headers: { Authorization: `Bearer ${store.accessToken}` },
   });
@@ -220,20 +320,17 @@ async function fetchNowPlaying() {
   return res.json();
 }
 
-// ---------- Render ----------
-function showSkeletons() {
-  const skel = Array.from({ length: 10 }, () => `<li class="skeleton"></li>`).join("");
-  els.artists.innerHTML = skel;
-  els.tracks.innerHTML = skel;
-  els.genres.innerHTML = "";
-}
+// ============================================================
+// Agrégation
+// ============================================================
 
 function aggregateGenres(artists) {
   const counts = new Map();
   artists.forEach((a, idx) => {
-    // Weighted: top-ranked artists matter more (1 / rank).
+    // Pondération douce : les artistes en haut du top comptent un peu plus,
+    // pour qu'un genre porté uniquement par la longue traîne ne domine pas.
     const weight = 1 + (artists.length - idx) / artists.length;
-    (a.genres || []).forEach(g => {
+    (a.genres || []).forEach((g) => {
       counts.set(g, (counts.get(g) || 0) + weight);
     });
   });
@@ -242,6 +339,10 @@ function aggregateGenres(artists) {
     .slice(0, 12)
     .map(([name, score]) => ({ name, score }));
 }
+
+// ============================================================
+// Rendu
+// ============================================================
 
 const relTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
 function timeAgo(iso) {
@@ -252,41 +353,49 @@ function timeAgo(iso) {
   return relTime.format(-Math.round(diff / 86400), "day");
 }
 
-function renderRecents(items) {
-  if (!items?.length) {
-    els.recents.innerHTML = `<li class="genre-head">Aucun titre récent.</li>`;
-    return;
-  }
-  els.recents.innerHTML = items.map((it) => {
-    const t = it.track;
-    const img = (t.album?.images && t.album.images[t.album.images.length - 1]?.url) || "";
-    const artists = (t.artists || []).map(a => escapeHtml(a.name)).join(", ");
+function showSkeletons() {
+  const skel = Array.from({ length: 10 }, () => `<li class="skeleton"></li>`).join("");
+  els.artists.innerHTML = skel;
+  els.tracks.innerHTML = skel;
+  els.genres.innerHTML = "";
+}
+
+function renderArtists(items) {
+  els.artists.innerHTML = items.map((a, i) => {
+    const img = safeImageUrl(a.images?.[a.images.length - 1]?.url);
+    const link = safeUrl(a.external_urls?.spotify);
+    const genres = (a.genres || []).slice(0, 2).map(escapeHtml).join(" · ") || "—";
     return `<li class="row fade-in">
+      <span class="rank">${i + 1}</span>
       ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
       <div class="meta">
-        <a href="${t.external_urls.spotify}" target="_blank" rel="noopener">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
+          <div class="title">${escapeHtml(a.name)}</div>
+        </a>
+        <div class="artist">${genres}</div>
+      </div>
+    </li>`;
+  }).join("");
+  updateExpandVisibility("artists", items.length);
+}
+
+function renderTracks(items) {
+  els.tracks.innerHTML = items.map((t, i) => {
+    const img = safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url);
+    const link = safeUrl(t.external_urls?.spotify);
+    const artists = (t.artists || []).map((a) => escapeHtml(a.name)).join(", ");
+    return `<li class="row fade-in">
+      <span class="rank">${i + 1}</span>
+      ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
+      <div class="meta">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
           <div class="title">${escapeHtml(t.name)}</div>
         </a>
         <div class="artist">${artists}</div>
       </div>
-      <span class="when">${timeAgo(it.played_at)}</span>
     </li>`;
   }).join("");
-}
-
-function renderNowPlaying(data) {
-  if (!data || !data.item) {
-    els.nowPlaying.classList.add("hidden");
-    return;
-  }
-  const t = data.item;
-  const img = t.album?.images?.[0]?.url || "";
-  els.npArt.style.backgroundImage = img ? `url("${img}")` : "";
-  els.npTitle.textContent = t.name;
-  els.npArtist.textContent = (t.artists || []).map(a => a.name).join(", ");
-  const pct = t.duration_ms ? Math.min(100, (data.progress_ms / t.duration_ms) * 100) : 0;
-  els.npProgress.style.width = `${pct}%`;
-  els.nowPlaying.classList.remove("hidden");
+  updateExpandVisibility("tracks", items.length);
 }
 
 function renderGenres(items) {
@@ -308,43 +417,43 @@ function renderGenres(items) {
   }).join("");
 }
 
-function renderArtists(items) {
-  els.artists.innerHTML = items.map((a, i) => {
-    const img = (a.images && a.images[a.images.length - 1]?.url) || "";
+function renderRecents(items) {
+  if (!items?.length) {
+    els.recents.innerHTML = `<li class="genre-head">Aucun titre récent.</li>`;
+    return;
+  }
+  els.recents.innerHTML = items.map((it) => {
+    const t = it.track;
+    const img = safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url);
+    const link = safeUrl(t.external_urls?.spotify);
+    const artists = (t.artists || []).map((a) => escapeHtml(a.name)).join(", ");
     return `<li class="row fade-in">
-      <span class="rank">${i + 1}</span>
       ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
       <div class="meta">
-        <a href="${a.external_urls.spotify}" target="_blank" rel="noopener">
-          <div class="title">${escapeHtml(a.name)}</div>
-        </a>
-        <div class="artist">${(a.genres || []).slice(0, 2).map(escapeHtml).join(" · ") || "—"}</div>
-      </div>
-    </li>`;
-  }).join("");
-}
-
-function renderTracks(items) {
-  els.tracks.innerHTML = items.map((t, i) => {
-    const img = (t.album?.images && t.album.images[t.album.images.length - 1]?.url) || "";
-    const artists = (t.artists || []).map(a => escapeHtml(a.name)).join(", ");
-    return `<li class="row fade-in">
-      <span class="rank">${i + 1}</span>
-      ${img ? `<img src="${img}" alt="" loading="lazy" />` : ""}
-      <div class="meta">
-        <a href="${t.external_urls.spotify}" target="_blank" rel="noopener">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
           <div class="title">${escapeHtml(t.name)}</div>
         </a>
         <div class="artist">${artists}</div>
       </div>
+      <span class="when">${escapeHtml(timeAgo(it.played_at))}</span>
     </li>`;
   }).join("");
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+function renderNowPlaying(data) {
+  if (!data || !data.item) {
+    els.nowPlaying.classList.add("hidden");
+    return;
+  }
+  const t = data.item;
+  const img = safeImageUrl(t.album?.images?.[0]?.url);
+  // JSON.stringify garantit un quoting CSS sûr du URL.
+  els.npArt.style.backgroundImage = img ? `url(${JSON.stringify(img)})` : "";
+  els.npTitle.textContent = t.name;
+  els.npArtist.textContent = (t.artists || []).map((a) => a.name).join(", ");
+  const pct = t.duration_ms ? Math.min(100, (data.progress_ms / t.duration_ms) * 100) : 0;
+  els.npProgress.style.width = `${pct}%`;
+  els.nowPlaying.classList.remove("hidden");
 }
 
 function showError(msg) {
@@ -356,11 +465,42 @@ function clearError() {
   els.error.classList.add("hidden");
 }
 
-// ---------- State / routing ----------
+// ============================================================
+// Toggle "Voir tout / Réduire" pour les top lists
+// ============================================================
+
+function updateExpandVisibility(target, count) {
+  const btn = els.expandToggles.find((b) => b.dataset.target === target);
+  if (!btn) return;
+  if (count <= TOP_VISIBLE_DEFAULT) {
+    btn.classList.add("hidden");
+  } else {
+    btn.classList.remove("hidden");
+    const list = $(`#${target}`);
+    const condensed = list.classList.contains("condensed");
+    btn.textContent = condensed ? `Voir les ${count}` : "Réduire";
+  }
+}
+
+function wireExpandToggles() {
+  els.expandToggles.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const list = $(`#${btn.dataset.target}`);
+      if (!list) return;
+      const wasCondensed = list.classList.toggle("condensed");
+      const total = list.children.length;
+      btn.textContent = wasCondensed ? `Voir les ${total}` : "Réduire";
+    });
+  });
+}
+
+// ============================================================
+// État applicatif
+// ============================================================
+
 let currentRange = "short_term";
 let lastSnapshot = { range: null, tracks: [], artists: [], me: null };
 let nowPlayingTimer = null;
-const NOW_PLAYING_INTERVAL_MS = 20_000;
 
 const RANGE_LABELS = {
   short_term: "4 dernières semaines",
@@ -370,7 +510,7 @@ const RANGE_LABELS = {
 
 async function loadRange(range) {
   currentRange = range;
-  els.tabs.forEach(t => t.classList.toggle("active", t.dataset.range === range));
+  els.tabs.forEach((t) => t.classList.toggle("active", t.dataset.range === range));
   showSkeletons();
   clearError();
   try {
@@ -394,7 +534,7 @@ async function loadRecents() {
   try {
     renderRecents(await fetchRecents());
   } catch (e) {
-    // Non-fatal: missing scope or transient error shouldn't break the page.
+    // Non bloquant : un scope manquant ne doit pas casser la page.
     console.warn("recents:", e);
   }
 }
@@ -402,7 +542,7 @@ async function loadRecents() {
 async function pollNowPlaying() {
   try {
     renderNowPlaying(await fetchNowPlaying());
-  } catch (e) {
+  } catch {
     renderNowPlaying(null);
   }
 }
@@ -417,7 +557,10 @@ function stopNowPlaying() {
   nowPlayingTimer = null;
 }
 
-// ---------- Image export ----------
+// ============================================================
+// Export image
+// ============================================================
+
 function loadImage(url) {
   return new Promise((resolve) => {
     if (!url) return resolve(null);
@@ -441,7 +584,8 @@ function roundRect(ctx, x, y, w, h, r) {
 
 function truncate(ctx, text, maxWidth) {
   if (ctx.measureText(text).width <= maxWidth) return text;
-  let lo = 0, hi = text.length;
+  let lo = 0;
+  let hi = text.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     if (ctx.measureText(text.slice(0, mid) + "…").width <= maxWidth) lo = mid + 1;
@@ -459,13 +603,13 @@ async function exportAsImage() {
   els.exportImage.textContent = "Génération…";
 
   try {
-    const W = 1080, H = 1350;
+    const W = 1080;
+    const H = 1350;
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d");
 
-    // Background — gradient.
     const grad = ctx.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, "#0b0d10");
     grad.addColorStop(0.6, "#11161d");
@@ -473,14 +617,12 @@ async function exportAsImage() {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Accent glow.
     const glow = ctx.createRadialGradient(W * 0.85, H * 0.1, 0, W * 0.85, H * 0.1, 600);
     glow.addColorStop(0, "rgba(30, 215, 96, 0.18)");
     glow.addColorStop(1, "rgba(30, 215, 96, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
 
-    // Header.
     ctx.fillStyle = "#1ed760";
     ctx.font = "600 22px Inter, system-ui";
     ctx.fillText("SPOTIFY STATS", 60, 90);
@@ -493,13 +635,12 @@ async function exportAsImage() {
     ctx.font = "400 24px Inter, system-ui";
     ctx.fillText(RANGE_LABELS[range] || range, 60, 188);
 
-    // Top 5 artists row.
     ctx.fillStyle = "#8a93a0";
     ctx.font = "600 16px Inter, system-ui";
     ctx.fillText("TOP 5 ARTISTES", 60, 270);
 
     const topArtists = artists.slice(0, 5);
-    const artistImgs = await Promise.all(topArtists.map(a => loadImage(a.images?.[1]?.url || a.images?.[0]?.url)));
+    const artistImgs = await Promise.all(topArtists.map((a) => loadImage(safeImageUrl(a.images?.[1]?.url || a.images?.[0]?.url))));
     const aSize = 160;
     const aGap = 24;
     const aTotalW = aSize * 5 + aGap * 4;
@@ -522,13 +663,12 @@ async function exportAsImage() {
       ctx.textAlign = "left";
     });
 
-    // Top 5 tracks list.
     ctx.fillStyle = "#8a93a0";
     ctx.font = "600 16px Inter, system-ui";
     ctx.fillText("TOP 5 TITRES", 60, 580);
 
     const topTracks = tracks.slice(0, 5);
-    const trackImgs = await Promise.all(topTracks.map(t => loadImage(t.album?.images?.[1]?.url || t.album?.images?.[0]?.url)));
+    const trackImgs = await Promise.all(topTracks.map((t) => loadImage(safeImageUrl(t.album?.images?.[1]?.url || t.album?.images?.[0]?.url))));
     const tHeight = 110;
     const tY0 = 610;
     topTracks.forEach((t, i) => {
@@ -562,16 +702,14 @@ async function exportAsImage() {
 
       ctx.fillStyle = "#8a93a0";
       ctx.font = "400 20px Inter, system-ui";
-      const artistsLine = (t.artists || []).map(a => a.name).join(", ");
+      const artistsLine = (t.artists || []).map((a) => a.name).join(", ");
       ctx.fillText(truncate(ctx, artistsLine, textMaxW), textX, y + 80);
     });
 
-    // Footer.
     ctx.fillStyle = "#5b6573";
     ctx.font = "500 18px Inter, system-ui";
     ctx.fillText("Généré avec Spotify Stats", 60, H - 50);
 
-    // Trigger download.
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -587,7 +725,10 @@ async function exportAsImage() {
   }
 }
 
-// ---------- Playlist creation ----------
+// ============================================================
+// Création de playlist
+// ============================================================
+
 function setPlaylistStatus(msg, { error = false, link = null } = {}) {
   if (!msg) {
     els.playlistStatus.classList.add("hidden");
@@ -596,9 +737,20 @@ function setPlaylistStatus(msg, { error = false, link = null } = {}) {
   }
   els.playlistStatus.classList.remove("hidden");
   els.playlistStatus.classList.toggle("error", error);
-  els.playlistStatus.innerHTML = link
-    ? `${escapeHtml(msg)} <a href="${link}" target="_blank" rel="noopener">Ouvrir →</a>`
-    : escapeHtml(msg);
+  // On évite innerHTML : on construit le DOM, ce qui rend l'XSS impossible
+  // même si `msg` venait à contenir du HTML un jour.
+  els.playlistStatus.textContent = msg;
+  if (link) {
+    const safeLink = safeUrl(link);
+    if (safeLink !== "#") {
+      const a = document.createElement("a");
+      a.href = safeLink;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = " Ouvrir →";
+      els.playlistStatus.appendChild(a);
+    }
+  }
 }
 
 async function createPlaylistFromTopTracks() {
@@ -621,7 +773,13 @@ async function createPlaylistFromTopTracks() {
         public: false,
       },
     });
-    const uris = tracks.map(t => t.uri).filter(Boolean);
+    // Validation stricte des URIs avant POST : on refuse tout ce qui ne ressemble
+    // pas à un identifiant Spotify legit, pour éviter d'injecter n'importe quoi
+    // dans la playlist si l'API renvoyait un objet dégradé.
+    const uris = tracks
+      .map((t) => t.uri)
+      .filter(isValidSpotifyTrackUri);
+    if (!uris.length) throw new Error("Aucune URI de piste valide à insérer.");
     await api(`/playlists/${playlist.id}/tracks`, {
       method: "POST",
       body: { uris },
@@ -636,6 +794,10 @@ async function createPlaylistFromTopTracks() {
   }
 }
 
+// ============================================================
+// Routage
+// ============================================================
+
 function showSection(name) {
   els.notConfigured.classList.toggle("hidden", name !== "not-configured");
   els.login.classList.toggle("hidden", name !== "login");
@@ -646,21 +808,34 @@ async function boot() {
   // 1) Retour OAuth ?
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
+  const returnedState = url.searchParams.get("state");
   const oauthError = url.searchParams.get("error");
+
   if (oauthError) {
     showError(`Spotify a refusé l'auth : ${oauthError}`);
   }
+
   if (code) {
-    try {
-      await exchangeCodeForToken(code);
-    } catch (e) {
-      showError(e.message);
+    const expectedState = store.oauthState;
+    if (!looksLikeOauthCode(code)) {
+      showError("Code OAuth invalide reçu — auth annulée.");
+    } else if (!expectedState || returnedState !== expectedState) {
+      // State manquant ou différent → soit la session a sauté, soit on est
+      // ciblé par une CSRF. Dans les deux cas on refuse d'échanger le code.
+      showError("État OAuth invalide — probable tentative CSRF, auth annulée.");
+    } else {
+      try {
+        await exchangeCodeForToken(code);
+      } catch (e) {
+        showError(e.message);
+      }
     }
-    // Nettoyer l'URL
+    store.clearOauthEphemeral();
+    // On vire le code de la barre d'URL (et donc de l'historique).
     window.history.replaceState({}, document.title, REDIRECT_URI);
   }
 
-  // 2) Configured?
+  // 2) Config présente ?
   if (!store.clientId) {
     showSection("not-configured");
     return;
@@ -676,14 +851,18 @@ async function boot() {
   startNowPlaying();
 }
 
-// ---------- Event wiring ----------
+// ============================================================
+// Wiring des évènements
+// ============================================================
+
 els.loginBtn.addEventListener("click", () => {
   clearError();
-  startLogin().catch(e => showError(e.message));
+  startLogin().catch((e) => showError(e.message));
 });
 
 els.logoutBtn.addEventListener("click", () => {
   store.clearTokens();
+  store.clearOauthEphemeral();
   stopNowPlaying();
   showSection("login");
 });
@@ -693,12 +872,13 @@ document.addEventListener("visibilitychange", () => {
   else if (store.accessToken && !els.app.classList.contains("hidden")) startNowPlaying();
 });
 
-els.tabs.forEach(t => {
+els.tabs.forEach((t) => {
   t.addEventListener("click", () => loadRange(t.dataset.range));
 });
 
 els.themeToggle.addEventListener("click", toggleTheme);
 els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
 els.exportImage.addEventListener("click", exportAsImage);
+wireExpandToggles();
 
 boot();
