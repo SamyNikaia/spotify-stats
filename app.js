@@ -827,7 +827,7 @@ async function runSearch(query) {
   els.searchResults.innerHTML = `<div class="search-empty">Recherche…</div>`;
   try {
     const data = await api(
-      `/search?q=${encodeURIComponent(q)}&type=artist,album,track&limit=${SEARCH_LIMIT_PER_TYPE}`
+      `/search?q=${encodeURIComponent(q)}&type=artist,album,track,playlist&limit=${SEARCH_LIMIT_PER_TYPE}`
     );
     if (mySeq !== searchSeq) return;
     renderSearchResults(data);
@@ -841,8 +841,11 @@ function renderSearchResults(data) {
   const artists = data?.artists?.items || [];
   const albums = data?.albums?.items || [];
   const tracks = data?.tracks?.items || [];
+  // L'API peut renvoyer des entrées `null` dans playlists.items quand la
+  // playlist est privée ou indisponible — on filtre.
+  const playlists = (data?.playlists?.items || []).filter(Boolean);
 
-  if (!artists.length && !albums.length && !tracks.length) {
+  if (!artists.length && !albums.length && !tracks.length && !playlists.length) {
     els.searchResults.innerHTML = `<div class="search-empty">Aucun résultat.</div>`;
     return;
   }
@@ -873,6 +876,15 @@ function renderSearchResults(data) {
       img: safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url),
       title: t.name,
       sub: (t.artists || []).map((x) => x.name).join(", "),
+    }))));
+  }
+  if (playlists.length) {
+    sections.push(renderSearchSection("Playlists", playlists.map((p) => ({
+      type: "playlist",
+      id: p.id,
+      img: safeImageUrl(p.images?.[p.images.length - 1]?.url),
+      title: p.name,
+      sub: `Par ${p.owner?.display_name || "?"} · ${p.tracks?.total ?? "?"} titres`,
     }))));
   }
   els.searchResults.innerHTML = sections.join("");
@@ -957,6 +969,9 @@ async function openDetail(type, id) {
     } else if (type === "track") {
       const track = await api(`/tracks/${encodeURIComponent(id)}`);
       renderTrackDetail(track);
+    } else if (type === "playlist") {
+      const playlist = await api(`/playlists/${encodeURIComponent(id)}`);
+      renderPlaylistDetail(playlist);
     }
   } catch (e) {
     els.modalBody.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
@@ -1105,6 +1120,79 @@ function renderTrackDetail(track) {
       <span class="stat-pill">Popularité <strong>${track.popularity ?? 0}/100</strong></span>
       ${track.explicit ? `<span class="stat-pill">Explicit</span>` : ""}
       ${track.album?.release_date ? `<span class="stat-pill">Sorti <strong>${escapeHtml(track.album.release_date)}</strong></span>` : ""}
+    </div>
+    <div class="modal-actions">
+      <a class="primary" href="${spotifyLink}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; padding:11px 18px; border-radius:10px;">Ouvrir sur Spotify</a>
+    </div>
+  `;
+}
+
+function renderPlaylistDetail(playlist) {
+  const cover = safeImageUrl(playlist.images?.[0]?.url);
+  const spotifyLink = safeUrl(playlist.external_urls?.spotify);
+  const ownerName = playlist.owner?.display_name || playlist.owner?.id || "?";
+  const ownerLink = safeUrl(playlist.owner?.external_urls?.spotify);
+
+  // L'endpoint renvoie au max 100 tracks dans `tracks.items` ; on indique le
+  // total séparément via tracks.total pour éviter le malentendu.
+  const items = (playlist.tracks?.items || []).filter((x) => x && x.track);
+  const totalMs = items.reduce((sum, it) => sum + (it.track?.duration_ms || 0), 0);
+  const totalTracks = playlist.tracks?.total ?? items.length;
+
+  const trackRows = items.map((it, i) => {
+    const t = it.track;
+    const link = safeUrl(t.external_urls?.spotify);
+    return `<li class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="meta">
+        <a href="${link}" target="_blank" rel="noopener noreferrer">
+          <div class="title">${escapeHtml(t.name)}</div>
+        </a>
+        <div class="artist">${(t.artists || []).map((a) => escapeHtml(a.name)).join(", ")}</div>
+      </div>
+      <span class="when">${fmtDuration(t.duration_ms || 0)}</span>
+    </li>`;
+  }).join("");
+
+  // La description peut contenir des balises HTML envoyées par Spotify — on
+  // s'en méfie et on extrait juste le texte via DOMParser.
+  let descText = "";
+  if (playlist.description) {
+    try {
+      const doc = new DOMParser().parseFromString(playlist.description, "text/html");
+      descText = doc.body?.textContent?.trim() || "";
+    } catch {
+      descText = "";
+    }
+  }
+
+  const truncatedNotice = totalTracks > items.length
+    ? `<p class="detail-sub" style="margin-top:10px">Affichage des ${items.length} premiers titres sur ${fmtNumber(totalTracks)} au total.</p>`
+    : "";
+
+  els.modalBody.innerHTML = `
+    <div class="detail-head">
+      ${cover ? `<img src="${cover}" alt="" class="cover" />` : `<div class="cover"></div>`}
+      <div>
+        <div class="detail-kind">Playlist</div>
+        <h2 id="modal-title" class="detail-name">${escapeHtml(playlist.name)}</h2>
+        <p class="detail-sub">Par ${ownerLink !== "#"
+          ? `<a href="${ownerLink}" target="_blank" rel="noopener noreferrer">${escapeHtml(ownerName)}</a>`
+          : escapeHtml(ownerName)}</p>
+        ${descText ? `<p class="detail-sub">${escapeHtml(descText)}</p>` : ""}
+      </div>
+    </div>
+    <div class="detail-stats">
+      <span class="stat-pill"><strong>${fmtNumber(totalTracks)}</strong> titres</span>
+      <span class="stat-pill">Durée affichée <strong>${fmtDuration(totalMs)}</strong></span>
+      ${playlist.followers?.total != null ? `<span class="stat-pill"><strong>${fmtNumber(playlist.followers.total)}</strong> followers</span>` : ""}
+      ${playlist.public === false ? `<span class="stat-pill">Privée</span>` : ""}
+      ${playlist.collaborative ? `<span class="stat-pill">Collaborative</span>` : ""}
+    </div>
+    <div class="detail-section">
+      <h3>Pistes</h3>
+      <ol class="detail-list">${trackRows || `<li class="genre-head">Playlist vide.</li>`}</ol>
+      ${truncatedNotice}
     </div>
     <div class="modal-actions">
       <a class="primary" href="${spotifyLink}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; padding:11px 18px; border-radius:10px;">Ouvrir sur Spotify</a>
