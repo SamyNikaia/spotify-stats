@@ -216,6 +216,42 @@ code {
   color: var(--fg-dim);
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.card-head h2 { margin: 0; }
+
+button.ghost.small {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+.playlist-status {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font-size: 13px;
+}
+.playlist-status.error {
+  background: rgba(255, 122, 89, 0.08);
+  border-color: rgba(255, 122, 89, 0.4);
+  color: var(--warn);
+}
+.playlist-status a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.playlist-status a:hover { text-decoration: underline; }
+
 .hidden { display: none !important; }
 
 /* ============================================================
