@@ -123,6 +123,56 @@
         <ol id="genres" class="genre-list"></ol>
       </section>
 
+      <section class="card evo" id="evolution">
+        <div class="card-head">
+          <h2>Évolution</h2>
+          <span id="evo-status" class="evo-status">Chargement…</span>
+        </div>
+        <p class="evo-intro">Comparaison entre tes 4 dernières semaines, 6 derniers mois et 1 dernière année.</p>
+
+        <div class="evo-block">
+          <h3>Artistes</h3>
+          <div class="evo-cols">
+            <div class="evo-col">
+              <div class="evo-label evo-discoveries">Découvertes</div>
+              <p class="evo-hint">Présents dans tes 4 semaines mais pas dans ton année.</p>
+              <ol id="evo-artists-discoveries" class="evo-list"></ol>
+            </div>
+            <div class="evo-col">
+              <div class="evo-label evo-constants">Constants</div>
+              <p class="evo-hint">Présents dans tes 3 périodes — tes piliers.</p>
+              <ol id="evo-artists-constants" class="evo-list"></ol>
+            </div>
+            <div class="evo-col">
+              <div class="evo-label evo-gone">Sortis du top</div>
+              <p class="evo-hint">Étaient dans ton année mais plus dans tes 4 semaines.</p>
+              <ol id="evo-artists-gone" class="evo-list"></ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="evo-block">
+          <h3>Titres</h3>
+          <div class="evo-cols">
+            <div class="evo-col">
+              <div class="evo-label evo-discoveries">Découvertes</div>
+              <p class="evo-hint">Apparus dans tes 4 semaines, absents de ton année.</p>
+              <ol id="evo-tracks-discoveries" class="evo-list"></ol>
+            </div>
+            <div class="evo-col">
+              <div class="evo-label evo-constants">Constants</div>
+              <p class="evo-hint">Présents dans tes 3 périodes.</p>
+              <ol id="evo-tracks-constants" class="evo-list"></ol>
+            </div>
+            <div class="evo-col">
+              <div class="evo-label evo-gone">Sortis du top</div>
+              <p class="evo-hint">Étaient dans ton année, plus dans tes 4 semaines.</p>
+              <ol id="evo-tracks-gone" class="evo-list"></ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Récemment écoutés</h2>
         <ol id="recents" class="list recents"></ol>

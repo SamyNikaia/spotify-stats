@@ -61,6 +61,14 @@ const els = {
   manualConfigForm: $("#manual-config-form"),
   manualClientId: $("#manual-client-id"),
   manualConfigError: $("#manual-config-error"),
+  evolution: $("#evolution"),
+  evoStatus: $("#evo-status"),
+  evoArtistsDiscoveries: $("#evo-artists-discoveries"),
+  evoArtistsConstants: $("#evo-artists-constants"),
+  evoArtistsGone: $("#evo-artists-gone"),
+  evoTracksDiscoveries: $("#evo-tracks-discoveries"),
+  evoTracksConstants: $("#evo-tracks-constants"),
+  evoTracksGone: $("#evo-tracks-gone"),
   error: $("#error"),
   userChip: $("#user-chip"),
   userAvatar: $("#user-avatar"),
@@ -536,6 +544,14 @@ async function loadRange(range) {
     lastSnapshot = { range, tracks, artists, me };
     setPlaylistStatus(null);
     els.savePlaylist.disabled = false;
+
+    // Cache la range courante pour la section Évolution, puis lance le
+    // pre-fetch des 2 autres en background sans bloquer l'UI.
+    tripleRangeCache[range] = { artists, tracks };
+    setEvoLoading();
+    ensureAllRanges()
+      .then(renderEvolution)
+      .catch(() => { els.evoStatus.textContent = "Indisponible"; });
   } catch (e) {
     showError(e.message || String(e));
     els.artists.innerHTML = "";
@@ -806,6 +822,115 @@ async function createPlaylistFromTopTracks() {
   } finally {
     els.savePlaylist.disabled = false;
   }
+}
+
+// ============================================================
+// Évolution : comparaison entre les 3 périodes
+// ============================================================
+
+// Cache des tops par période. Rempli au fil des navigations entre tabs +
+// pré-chargé pour les périodes non visitées dès qu'on en visite une (en
+// background, sans bloquer le rendu courant).
+const tripleRangeCache = {
+  short_term: null,
+  medium_term: null,
+  long_term: null,
+};
+
+async function fetchRangeIfMissing(range) {
+  if (tripleRangeCache[range]) return tripleRangeCache[range];
+  const [artists, tracks] = await Promise.all([
+    api(`/me/top/artists?time_range=${range}&limit=50`),
+    api(`/me/top/tracks?time_range=${range}&limit=50`),
+  ]);
+  tripleRangeCache[range] = { artists: artists.items, tracks: tracks.items };
+  return tripleRangeCache[range];
+}
+
+async function ensureAllRanges() {
+  const ranges = ["short_term", "medium_term", "long_term"];
+  await Promise.all(ranges.map(fetchRangeIfMissing));
+  return tripleRangeCache;
+}
+
+// 3 catégories : Découvertes (court terme uniquement), Constants (présent
+// dans les 3 périodes), Sortis du top (long terme uniquement).
+function categorize(short, medium, long) {
+  const shortIds = new Set(short.map((x) => x.id));
+  const mediumIds = new Set(medium.map((x) => x.id));
+  const longIds = new Set(long.map((x) => x.id));
+
+  const discoveries = short.filter((x) => !longIds.has(x.id) && !mediumIds.has(x.id));
+  const constants = short.filter((x) => longIds.has(x.id) && mediumIds.has(x.id));
+  const gone = long.filter((x) => !shortIds.has(x.id) && !mediumIds.has(x.id));
+
+  return { discoveries, constants, gone };
+}
+
+function renderEvoArtists(list, container) {
+  if (!list.length) {
+    container.innerHTML = `<li class="evo-empty">Rien dans cette catégorie.</li>`;
+    return;
+  }
+  container.innerHTML = list.slice(0, 8).map((a) => {
+    const img = safeImageUrl(a.images?.[a.images.length - 1]?.url);
+    return `<li>
+      <button class="evo-item kind-artist" data-detail-type="artist" data-detail-id="${escapeHtml(a.id)}">
+        ${img ? `<img src="${img}" alt="" loading="lazy" />` : `<span class="ph"></span>`}
+        <span class="evo-name">${escapeHtml(a.name)}</span>
+      </button>
+    </li>`;
+  }).join("");
+}
+
+function renderEvoTracks(list, container) {
+  if (!list.length) {
+    container.innerHTML = `<li class="evo-empty">Rien dans cette catégorie.</li>`;
+    return;
+  }
+  container.innerHTML = list.slice(0, 8).map((t) => {
+    const img = safeImageUrl(t.album?.images?.[t.album.images.length - 1]?.url);
+    const artist = (t.artists?.[0]?.name) || "";
+    return `<li>
+      <button class="evo-item kind-track" data-detail-type="track" data-detail-id="${escapeHtml(t.id)}">
+        ${img ? `<img src="${img}" alt="" loading="lazy" />` : `<span class="ph"></span>`}
+        <span class="evo-name">${escapeHtml(t.name)}</span>
+        <span class="evo-sub">${escapeHtml(artist)}</span>
+      </button>
+    </li>`;
+  }).join("");
+}
+
+function renderEvolution() {
+  const c = tripleRangeCache;
+  if (!c.short_term || !c.medium_term || !c.long_term) return;
+
+  const artistCat = categorize(c.short_term.artists, c.medium_term.artists, c.long_term.artists);
+  const trackCat = categorize(c.short_term.tracks, c.medium_term.tracks, c.long_term.tracks);
+
+  renderEvoArtists(artistCat.discoveries, els.evoArtistsDiscoveries);
+  renderEvoArtists(artistCat.constants, els.evoArtistsConstants);
+  renderEvoArtists(artistCat.gone, els.evoArtistsGone);
+
+  renderEvoTracks(trackCat.discoveries, els.evoTracksDiscoveries);
+  renderEvoTracks(trackCat.constants, els.evoTracksConstants);
+  renderEvoTracks(trackCat.gone, els.evoTracksGone);
+
+  els.evoStatus.textContent = "À jour";
+}
+
+function setEvoLoading() {
+  els.evoStatus.textContent = "Chargement…";
+}
+
+// Délégation de click sur tous les items d'évolution : on délègue à
+// openDetail comme pour la recherche.
+function wireEvolutionItems() {
+  els.evolution.addEventListener("click", (e) => {
+    const btn = e.target.closest(".evo-item");
+    if (!btn) return;
+    openDetail(btn.dataset.detailType, btn.dataset.detailId);
+  });
 }
 
 // ============================================================
@@ -1316,6 +1441,7 @@ els.themeToggle.addEventListener("click", toggleTheme);
 els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
 els.exportImage.addEventListener("click", exportAsImage);
 wireExpandToggles();
+wireEvolutionItems();
 
 // Fallback : si config.js n'a pas chargé (cache, CSP, autre), l'user peut
 // coller son CLIENT_ID directement depuis l'UI. On stocke en localStorage,
