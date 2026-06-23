@@ -1,39 +1,41 @@
 # Spotify Stats
 
-Static, no-backend SPA that shows your **top artists**, **top tracks**, **top genres**, **recently played** and **currently playing** on Spotify across 3 time ranges (4 weeks, 6 months, 1 year). One-click export of your top to an Instagram-ready PNG or a private Spotify playlist. Authenticates against Spotify via the **OAuth 2.0 PKCE** flow — tokens live in your browser only, nothing is sent to a third-party server.
+SPA statique, sans backend, qui affiche tes **top artistes**, **top titres**, **top genres**, **derniers titres écoutés** et le titre **en cours d'écoute** sur Spotify, sur 3 périodes (4 semaines, 6 mois, 1 an). Export en un clic de ton top en PNG prêt pour Instagram ou en playlist Spotify privée. Authentification via le flow **OAuth 2.0 PKCE** — les tokens vivent uniquement dans ton navigateur, rien n'est envoyé à un serveur tiers.
 
-## Features
+## Fonctionnalités
 
-- Top 50 artists, top 50 tracks, top 12 genres per period
-- Currently playing widget with auto-refresh
-- Recently played (last 50 tracks) with relative timestamps
-- Light / dark theme with system-preference detection
-- Save current top tracks as a private Spotify playlist
-- Export top stats as a 1080×1350 PNG card (Instagram 4:5)
+- Top 50 artistes, top 50 titres, top 12 genres par période
+- Widget « en cours d'écoute » avec rafraîchissement automatique
+- Récemment écoutés (50 derniers titres) avec dates relatives
+- Recherche libre artistes / albums / titres / playlists avec modal détail
+- Photo de profil Spotify dans le header
+- Thème clair / sombre avec détection des préférences système
+- Sauvegarde du top courant en playlist Spotify privée
+- Export du top en carte PNG 1080×1350 (format Instagram 4:5)
 
-## Setup (once, ~2 min)
+## Setup (une fois, ~2 min)
 
-1. Go to https://developer.spotify.com/dashboard and click **Create app**.
-2. Pick any name and description.
-3. Under **Redirect URIs**, add exactly:
+1. Va sur https://developer.spotify.com/dashboard et clique **Create app**.
+2. Mets n'importe quel nom / description.
+3. Dans **Redirect URIs**, ajoute exactement :
    ```
    http://127.0.0.1:8888/
    ```
-   (the trailing `/` matters)
-4. Tick **Web API**, then **Save**.
-5. Copy the **Client ID** and paste it into [`config.js`](./config.js) at the root:
+   (le `/` final est important)
+4. Coche **Web API**, puis **Save**.
+5. Copie le **Client ID** et colle-le dans [`config.js`](./config.js) à la racine :
    ```js
    window.SPOTIFY_CONFIG = {
-     CLIENT_ID: "your-client-id-here",
+     CLIENT_ID: "ton-client-id-ici",
      ...
    };
    ```
 
-> No Client Secret needed — PKCE handles that.
+> Pas besoin du Client Secret — PKCE s'en occupe.
 
-## Run locally
+## Lancer en local
 
-From the project root:
+Depuis la racine du projet :
 
 ### macOS / Linux
 ```bash
@@ -45,31 +47,32 @@ From the project root:
 start.bat
 ```
 
-Both scripts start a local Python HTTP server on port 8888 and open `http://127.0.0.1:8888/` in your browser.
+Les deux scripts démarrent un serveur HTTP Python local sur le port 8888 et ouvrent `http://127.0.0.1:8888/` dans ton navigateur.
 
-## Deploy
+## Déploiement
 
-The repo ships with a [`vercel.json`](./vercel.json) that sets strict security headers (CSP, Permissions-Policy, X-Frame-Options) tuned for the Spotify OAuth + CDN flow.
+Le repo contient un [`vercel.json`](./vercel.json) qui pose des headers de sécurité stricts (CSP, Permissions-Policy, X-Frame-Options) adaptés au flow OAuth Spotify + CDN.
 
 ```bash
-npm i -g vercel       # once
-vercel login          # once
-vercel --prod         # from the project root
+npm i -g vercel       # une fois
+vercel login          # une fois
+vercel --prod         # depuis la racine du projet
 ```
 
-After the first deploy, copy the Vercel URL (e.g. `https://spotify-stats-xxx.vercel.app/`) and add it to **Redirect URIs** in your Spotify dashboard alongside `http://127.0.0.1:8888/`. Spotify allows multiple URIs so you keep working locally.
+Après le premier déploiement, copie l'URL Vercel (ex : `https://spotify-stats-xxx.vercel.app/`) et ajoute-la aux **Redirect URIs** sur le dashboard Spotify, à côté de `http://127.0.0.1:8888/`. Spotify accepte plusieurs URIs, donc tu peux continuer à bosser en local sans rien casser.
 
-### Going public to anyone (Extended Quota Mode)
+### Passer en mode public pour tout le monde (Extended Quota Mode)
 
-Out of the box, a Spotify app is in **Development Mode** and only the 25 users you manually add in the dashboard can sign in. To open it to everyone you need to apply for **Extended Quota Mode** from your app dashboard. The review typically takes 1–3 weeks. The application will ask for:
+Par défaut, une app Spotify est en **Development Mode** et seuls les 25 utilisateurs que tu ajoutes manuellement dans le dashboard peuvent se connecter. Pour ouvrir à n'importe qui, il faut faire une demande de **Extended Quota Mode** depuis le dashboard de ton app. La review prend généralement 1 à 3 semaines. Le formulaire te demandera :
 
-- A public **Privacy Policy** URL → [`/privacy.html`](./privacy.html)
-- A public **Terms of Service** URL → [`/terms.html`](./terms.html)
-- A short demo video (1–2 min Loom is enough)
-- The deployed app URL with a working sign-in flow
+- Une URL publique de **Privacy Policy** → [`/privacy.html`](./privacy.html)
+- Une URL publique de **Terms of Service** → [`/terms.html`](./terms.html)
+- Une courte vidéo de démo (1–2 min de Loom suffisent)
+- L'URL de l'app déployée avec un flow de connexion fonctionnel
 
 ## Notes
 
-- Spotify's Web API only exposes 3 time ranges: `short_term` (~4 weeks), `medium_term` (~6 months), `long_term` (~1 year). There is no true "all time" since late 2024.
-- Tokens are stored in `localStorage`. **Logout** clears them.
-- Without **Extended Quota Mode** approval from Spotify, your app stays in Development mode and only the 25 users you manually add in the dashboard can log in.
+- L'API Web de Spotify n'expose que 3 périodes : `short_term` (~4 semaines), `medium_term` (~6 mois), `long_term` (~1 an). Le vrai « all time » n'existe plus depuis fin 2024.
+- Les tokens sont stockés dans `localStorage`. La **déconnexion** les efface.
+- Sans approbation **Extended Quota Mode** de Spotify, ton app reste en Development Mode et seuls les 25 utilisateurs que tu ajoutes manuellement dans le dashboard peuvent se connecter.
+- Les endpoints `/audio-features`, `/related-artists` et `/recommendations` ont été dépréciés par Spotify le 27 novembre 2024 pour les apps créées après. Cette app n'en dépend pas.
