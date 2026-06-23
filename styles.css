@@ -589,6 +589,155 @@ button.ghost:hover {
 }
 
 /* ============================================================
+   Section Évolution (comparaison entre les 3 périodes)
+   ============================================================ */
+.evo .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.evo-status {
+  font-size: 12px;
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+.evo-intro {
+  color: var(--fg-dim);
+  font-size: 13.5px;
+  margin: 0 0 22px;
+}
+
+.evo-block {
+  margin-top: 14px;
+}
+.evo-block h3 {
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  margin: 0 0 14px;
+}
+
+.evo-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 880px) {
+  .evo-cols { grid-template-columns: 1fr; }
+}
+
+.evo-col {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  min-width: 0;
+}
+
+.evo-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.evo-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.evo-discoveries {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.evo-discoveries::before { background: var(--accent); }
+.evo-constants {
+  color: #c9a86a;
+  background: rgba(201, 168, 106, 0.12);
+}
+.evo-constants::before { background: #c9a86a; }
+.evo-gone {
+  color: #ff8a96;
+  background: rgba(255, 138, 150, 0.12);
+}
+.evo-gone::before { background: #ff8a96; }
+
+.evo-hint {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.evo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.evo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--fg);
+  width: 100%;
+  font: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.evo-item:hover, .evo-item:focus-visible {
+  background: var(--bg-row-hover);
+  border-color: var(--border);
+  outline: none;
+}
+.evo-item img,
+.evo-item .ph {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--bg-row);
+}
+.evo-item.kind-artist img,
+.evo-item.kind-artist .ph { border-radius: 50%; }
+.evo-item .evo-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+.evo-item .evo-sub {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+.evo-empty {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  padding: 6px 8px;
+  font-style: italic;
+}
+
+/* ============================================================
    Barre de recherche + résultats
    ============================================================ */
 .search-wrap {
