@@ -529,6 +529,66 @@ button.ghost:hover {
 }
 
 /* ============================================================
+   Fallback UI sur l'écran "Configuration requise"
+   ============================================================ */
+.config-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  margin: 22px 0 14px;
+}
+.config-or::before,
+.config-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.config-fallback-intro {
+  color: var(--fg-dim);
+  font-size: 13.5px;
+  margin: 0 0 10px;
+}
+
+.manual-config {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.manual-config input {
+  flex: 1;
+  min-width: 240px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  padding: 11px 14px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.manual-config input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.manual-config-error {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: rgba(255, 95, 109, 0.08);
+  border: 1px solid rgba(255, 95, 109, 0.35);
+  border-radius: 8px;
+  color: #ff8a96;
+  font-size: 13px;
+}
+
+/* ============================================================
    Barre de recherche + résultats
    ============================================================ */
 .search-wrap {

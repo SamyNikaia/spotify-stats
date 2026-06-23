@@ -49,6 +49,15 @@
       <h2>Configuration requise</h2>
       <p>L'app n'a pas encore de <code>CLIENT_ID</code> Spotify. Édite <code>config.js</code> et colles-y le Client ID de ton app depuis <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>.</p>
       <p>N'oublie pas d'ajouter <code data-redirect-uri></code> aux Redirect URIs de ton app Spotify.</p>
+
+      <div class="config-or" aria-hidden="true"><span>OU</span></div>
+
+      <p class="config-fallback-intro">Colle ton Client ID directement ici — stocké uniquement dans ton navigateur :</p>
+      <form id="manual-config-form" class="manual-config" novalidate>
+        <input id="manual-client-id" type="text" placeholder="32 caractères alphanumériques" autocomplete="off" spellcheck="false" maxlength="32" required />
+        <button type="submit" class="primary">Valider</button>
+      </form>
+      <p id="manual-config-error" class="manual-config-error hidden"></p>
     </section>
 
     <section id="login" class="card hidden">

@@ -58,6 +58,9 @@ const els = {
   modal: $("#detail-modal"),
   modalBody: $("#modal-body"),
   modalCloseTriggers: $$("[data-modal-close]"),
+  manualConfigForm: $("#manual-config-form"),
+  manualClientId: $("#manual-client-id"),
+  manualConfigError: $("#manual-config-error"),
   error: $("#error"),
   userChip: $("#user-chip"),
   userAvatar: $("#user-avatar"),
@@ -1313,6 +1316,25 @@ els.themeToggle.addEventListener("click", toggleTheme);
 els.savePlaylist.addEventListener("click", createPlaylistFromTopTracks);
 els.exportImage.addEventListener("click", exportAsImage);
 wireExpandToggles();
+
+// Fallback : si config.js n'a pas chargé (cache, CSP, autre), l'user peut
+// coller son CLIENT_ID directement depuis l'UI. On stocke en localStorage,
+// `store.clientId` le retombe automatiquement en fallback.
+if (els.manualConfigForm) {
+  els.manualConfigForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const value = els.manualClientId.value.trim();
+    els.manualConfigError.classList.add("hidden");
+    if (!/^[A-Za-z0-9]{32}$/.test(value)) {
+      els.manualConfigError.textContent = "Le Client ID Spotify fait 32 caractères alphanumériques.";
+      els.manualConfigError.classList.remove("hidden");
+      els.manualClientId.focus();
+      return;
+    }
+    localStorage.setItem("sp_client_id", value);
+    window.location.reload();
+  });
+}
 
 // ---------- Wiring de la recherche ----------
 els.searchInput.addEventListener("input", onSearchInput);
